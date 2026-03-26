@@ -2,9 +2,10 @@
   "name": "game-engine",
   "version": "1.0.0",
   "description": "## What This Is",
-  "main": "main.js",
+  "main": "host/src/main.js",
   "scripts": {
     "start": "electron .",
+    "debug": "cross-env DEBUG=1 electron .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -17,7 +18,11 @@
     "url": "https://github.com/NHurst99/Game-Engine/issues"
   },
   "homepage": "https://github.com/NHurst99/Game-Engine#readme",
+  "dependencies": {
+    "adm-zip": "^0.5.10"
+  },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "^41.0.4"
   }
 }

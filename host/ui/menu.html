@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'">
+  <title>BoardGame Platform</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #263548;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      grid-template-rows: 72px 1fr;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+
+    .header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      -webkit-app-region: drag;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────── */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    .btn:active { opacity: 0.8; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+
+    .btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+    /* ── Game Library Panel ─────────────────────────────────────────── */
+
+    .library-panel {
+      padding: 24px 28px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .game-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .game-card:hover {
+      border-color: var(--accent);
+      background: var(--surface2);
+    }
+
+    .game-card:active { transform: scale(0.98); }
+
+    .game-card.selected {
+      border-color: var(--accent);
+      background: rgba(59,130,246,0.1);
+    }
+
+    .game-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      background: var(--surface2);
+      object-fit: cover;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .game-icon img {
+      width: 100%;
+      height: 100%;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+
+    .game-info { flex: 1; }
+
+    .game-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .game-meta {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .game-description {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .empty-library {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .empty-library .empty-icon { font-size: 48px; margin-bottom: 16px; }
+    .empty-library p { font-size: 15px; line-height: 1.6; }
+
+    /* ── Right Sidebar ───────────────────────────────────────────────── */
+
+    .sidebar {
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-section {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-section:last-child { border-bottom: none; }
+
+    /* ── Players Panel ───────────────────────────────────────────────── */
+
+    .players-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .player-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: var(--surface);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .player-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      flex-shrink: 0;
+    }
+
+    .no-players {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+
+    /* ── Action Buttons ──────────────────────────────────────────────── */
+
+    .sidebar-actions {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    /* ── Settings Overlay ────────────────────────────────────────────── */
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .settings-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 520px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .settings-panel h2 {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .setting-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .setting-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .setting-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .setting-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 10px 14px;
+      outline: none;
+    }
+
+    .setting-input:focus { border-color: var(--accent); }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .toggle-label { font-size: 15px; }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      cursor: pointer;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 12px;
+      transition: background 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track { background: var(--accent); }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked ~ .toggle-thumb { transform: translateX(20px); }
+
+    .settings-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Launch Bar ──────────────────────────────────────────────────── */
+
+    .launch-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 340px;
+      padding: 16px 28px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+      z-index: 10;
+    }
+
+    .launch-bar.visible { transform: translateY(0); }
+
+    .launch-game-info { display: flex; flex-direction: column; gap: 2px; }
+    .launch-game-name { font-size: 18px; font-weight: 700; }
+    .launch-game-meta { font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Header -->
+  <header class="header">
+    <h1>BOARDGAME PLATFORM</h1>
+    <div class="header-actions">
+      <span id="server-status" style="font-size:13px;color:var(--muted);align-self:center;display:none;">
+        Server on port <span id="server-port"></span>
+      </span>
+    </div>
+  </header>
+
+  <!-- Game Library -->
+  <main class="library-panel">
+    <div class="panel-title">Game Library</div>
+    <div id="games-grid" class="games-grid">
+      <div class="empty-library">
+        <div class="empty-icon">🎲</div>
+        <p>Loading games…</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="panel-title">Players Connected</div>
+      <div id="players-list" class="players-list"></div>
+      <p id="no-players" class="no-players">No players connected yet.<br>Players join via their phone browser.</p>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn btn-ghost" id="btn-settings">⚙ Settings</button>
+      <button class="btn btn-danger" id="btn-exit">✕ Exit</button>
+    </div>
+  </aside>
+</div>
+
+<!-- Launch Bar -->
+<div class="launch-bar" id="launch-bar">
+  <div class="launch-game-info">
+    <div class="launch-game-name" id="launch-name"></div>
+    <div class="launch-game-meta" id="launch-meta"></div>
+  </div>
+  <button class="btn btn-primary" id="btn-launch">Launch Game →</button>
+</div>
+
+<!-- Settings Overlay -->
+<div class="overlay" id="settings-overlay">
+  <div class="settings-panel">
+    <h2>Platform Settings</h2>
+
+    <div class="setting-row">
+      <div class="setting-label">Game Library Folder</div>
+      <div class="setting-input-row">
+        <input type="text" class="setting-input" id="setting-library" placeholder="/path/to/games">
+        <button class="btn btn-ghost" id="btn-browse">Browse</button>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="toggle-row">
+        <span class="toggle-label">Fullscreen</span>
+        <label class="toggle">
+          <input type="checkbox" id="setting-fullscreen">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="toggle-row">
+        <span class="toggle-label">Audio Enabled</span>
+        <label class="toggle">
+          <input type="checkbox" id="setting-audio">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-footer">
+      <button class="btn btn-ghost" id="btn-settings-cancel">Cancel</button>
+      <button class="btn btn-primary" id="btn-settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="menu.js"></script>
+</body>
+</html>
