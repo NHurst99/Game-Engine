@@ -14,36 +14,56 @@ Games are distributed as **`.boardgame` files** (renamed ZIPs containing `manife
 ## Commands
 
 ```bash
-# Run the host Electron app (from host/)
-npm start         # electron .
-
-# Build distributable (from host/)
-npm run build     # electron-builder
+npm start         # launch the Electron app (production mode)
+npm run debug     # launch with DEBUG=1 (fake games in library, DevTools open)
+npm run build     # build distributable via electron-builder
+npm test          # placeholder — not yet wired
 ```
 
-The root `main.js` is a minimal Electron entry point stub. The real implementation lives in `host/src/`.
+Run from the repo root. The entry point is `host/src/main.js` (set via `package.json` `"main"`).
+
+## Debug Mode
+
+Set `DEBUG=1` (or use `npm run debug`) to:
+- Inject 5 fake game cards into the library scanner
+- Auto-open Electron DevTools (detached)
+- The renderer receives `settings.debug === true` from `menu:settings-get`
 
 ## Architecture
 
 ### Process Topology
 
 ```text
-Host Electron Main Process
+Host Electron Main Process (host/src/main.js)
   ├── packLoader.js      — validates + extracts .boardgame ZIPs to OS temp dir
-  ├── gameRunner.js      — spawns game-sandbox as a Worker thread
   ├── socketServer.js    — Socket.io hub; sole message router for all participants
   ├── httpServer.js      — Express; serves player shell HTML + pack assets to phones
-  └── networkDiscovery.js — mDNS advertisement + QR code generation
+  ├── gameRunner.js      — spawns game-sandbox as a Worker thread
+  ├── networkDiscovery.js — mDNS advertisement + QR code generation
+  └── stateStore.js      — save/load game state blobs to userData
 
 Game Sandbox (Worker thread)
   └── game-sandbox/src/sandbox.js — runs pack's server/game.js via vm.runInNewContext
 
 Board Display (Electron BrowserWindow)
-  └── board-shell/src/   — shell.js connects via WS, mounts pack board.html in iframe
+  └── board-shell/src/   — NOT YET IMPLEMENTED (Phase 3)
 
 Player Client (phone browser)
-  └── player-shell/src/  — shell.js connects via WS, mounts pack player/hand.html in iframe
+  └── player-shell/src/  — NOT YET IMPLEMENTED (Phase 3)
+
+Main Menu UI (Electron renderer)
+  └── host/ui/menu.html + menu.js — game picker, player list, settings, exit
 ```
+
+### Startup Sequence
+
+1. Electron app ready → create BrowserWindow → load `host/ui/menu.html`
+2. Start Express + Socket.io server on dynamic port (3000–3100 via `get-port`)
+3. Start mDNS advertising + generate QR code
+4. Send `menu:server-ready` to renderer with port/joinUrl/qrDataUrl
+5. Phones can connect to the Socket.io server immediately (pre-game lobby)
+6. User selects a game → `menu:load-game` → packLoader validates + extracts → socketServer enters lobby
+7. User presses Start → `menu:start-game` → gameRunner spawns sandbox → `GAME_INIT` sent
 
 ### Message Flow
 
@@ -51,8 +71,24 @@ All communication is routed through the HOST. No participant talks directly to a
 
 - **PLAYER/BOARD ↔ HOST**: WebSocket (Socket.io) over local WiFi
 - **HOST ↔ GAME sandbox**: Node.js Worker thread `postMessage`
-- **HOST ↔ Board BrowserWindow**: Electron IPC (`platform:message`, `platform:send`, `platform:init`)
+- **HOST ↔ Board BrowserWindow**: Electron IPC (via `host/src/preload.js` bridge)
 - **Shell ↔ iframe (board.html / hand.html)**: `window.postMessage` only — iframes are sandboxed
+
+### IPC Channels (main ↔ renderer)
+
+| Channel | Direction | Purpose |
+|---|---|---|
+| `menu:settings-get` | invoke | Returns settings + debug flag |
+| `menu:settings-save` | invoke | Persist settings, apply fullscreen |
+| `menu:get-games` | invoke | Scan library folder for .boardgame packs |
+| `menu:browse-library` | invoke | OS folder picker dialog |
+| `menu:load-game` | invoke | Validate + extract pack, enter lobby |
+| `menu:start-game` | invoke | Spawn sandbox, send GAME_INIT |
+| `menu:stop-game` | invoke | Save state + stop sandbox |
+| `menu:exit` | send | Quit app |
+| `menu:server-ready` | push | Port, join URL, QR code data URL |
+| `menu:players-update` | push | Live player connection list |
+| `menu:game-error` | push | Error message from sandbox |
 
 ### Game Sandbox Security Model
 
@@ -63,18 +99,20 @@ All communication is routed through the HOST. No participant talks directly to a
 
 Blocked: `require`, `process`, `fetch`, `setTimeout`/`setInterval`, `globalThis`, `Buffer`, `fs`, `net`.
 
+`globalThis` is blocked via `Object.defineProperty` getter that throws (V8 auto-sets it on vm contexts — `delete` doesn't work).
+
 Game scripts use `ctx.timer()` instead of `setTimeout`, `ctx.random()` instead of `Math.random()`.
 
 ### Pack Format
 
 A `.boardgame` file is a ZIP with a `manifest.json` at root. Required manifest fields:
 
-- `id` — reverse-domain identifier (e.g. `com.author.gamename`)
-- `name`, `version` (semver)
-- `players.min`, `players.max`
-- `entry.server` — path to `server/game.js` inside the pack
-- `entry.board` — path to board HTML
-- `entry.player` — path to player HTML
+- `id` — reverse-domain identifier, pattern `^[a-z0-9]+(\.[a-z0-9]+)+$`
+- `name`, `version` (strict semver `^\d+\.\d+\.\d+$`)
+- `players.min` (>= 1), `players.max` (>= min)
+- `entry.server`, `entry.board`, `entry.player` — paths that must exist in the ZIP
+
+Pack loading security (`packLoader.js`): path traversal guard, symlink rejection, executable warnings, ZIP bomb detection (2GB hard cap). Extracted to `os.tmpdir()/boardgame-{id}-{timestamp}/`, cleaned up on quit or new pack load.
 
 ### GameContext API (for `server/game.js` authors)
 
@@ -87,13 +125,13 @@ ctx.getPlayers()                 // [{ id, name, index, connected }]
 ctx.getSettings()                // settings object from GAME_INIT
 ctx.timer(ms, eventType, payload) // safe timer (returns timerId)
 ctx.clearTimer(timerId)
-ctx.random()                     // seeded PRNG, returns [0,1)
+ctx.random()                     // seeded PRNG (mulberry32), returns [0,1)
 ctx.randomInt(min, max)
 ctx.shuffle(array)
 ctx.log(message)
 ```
 
-Game scripts must respond to `GAME_INIT` and emit `GAME_READY`. HOST queues all other messages until `GAME_READY` is received.
+Game scripts must respond to `GAME_INIT` and emit `GAME_READY`. HOST queues all other messages until `GAME_READY` is received. 5s timeout kills the sandbox if `GAME_READY` doesn't arrive.
 
 ### Key Event Types
 
@@ -103,7 +141,7 @@ See `DOCS/SOCKET_API.md` for full spec. Critical events:
 | --- | --- | --- |
 | HOST→GAME | `GAME_INIT` | Players, settings, locale. Must reply with `GAME_READY`. |
 | HOST→GAME | `PLAYER_ACTION` | Forwarded from player phone, includes `from: "player:p1"` |
-| GAME→HOST | `UPDATE_BOARD` | HOST forwards to board iframe |
+| GAME→HOST | `UPDATE_BOARD` | HOST forwards to board iframe. Cached for reconnection. |
 | GAME→HOST | `UPDATE_PLAYER` | Must set `to: "player:p1"`, HOST forwards to that phone |
 | PLAYER→HOST | `JOIN_REQUEST` | HOST-managed lobby, not forwarded to game until game starts |
 | HOST→BOARD | `BOARD_INIT` | Sent after board signals `BOARD_READY` |
@@ -112,22 +150,67 @@ See `DOCS/SOCKET_API.md` for full spec. Critical events:
 
 The HOST manages the lobby independently — the game sandbox is **not spawned** until the human at the TV presses Start. Flow:
 
-1. Players connect → `JOIN_REQUEST` → HOST assigns IDs → `PLAYER_JOIN` → `LOBBY_STATE` broadcast
-2. All players send `READY` → HOST enables Start
-3. Human starts → HOST spawns sandbox → `GAME_INIT` → sandbox replies `GAME_READY` → game begins
+1. Players connect → `JOIN_REQUEST` → HOST assigns IDs (`p1`, `p2`, ...) → `PLAYER_JOIN` → `LOBBY_STATE` broadcast
+2. All players send `READY` → HOST enables Start (`canStart: true` in `LOBBY_STATE`)
+3. Human starts → HOST spawns sandbox → `GAME_INIT` → sandbox replies `GAME_READY` → existing players notified via `PLAYER_CONNECTED` → game begins
 
 ### State Persistence
 
-If `persistState: true` in manifest, HOST auto-saves by sending `SAVE_STATE_REQUEST` → game replies `SAVE_STATE_RESPONSE` with opaque JSON blob. Saved to `{userData}/saves/{packId}/{majorVersion}/latest.json`. On next load, HOST sends `RESTORE_STATE` after `GAME_INIT`.
-
-### Pack Loading Security
-
-`packLoader.js` must check for path traversal (entries escaping temp dir), reject symlinks, and warn on executables before extraction. Temp dir cleaned up on quit or when new pack loads.
+If `persistState: true` in manifest, HOST auto-saves by sending `SAVE_STATE_REQUEST` → game replies `SAVE_STATE_RESPONSE` with opaque JSON blob. Saved to `{userData}/saves/{packId}/{major}.x/latest.json`. On next load, HOST sends `RESTORE_STATE` after `GAME_INIT`. State save has a 3s timeout.
 
 ## Implementation Status
 
-This repository currently contains only architecture documentation and IMPLEMENTATION.md guides. The actual source files (`host/src/`, `board-shell/src/`, `player-shell/src/`, `game-sandbox/src/`) are **not yet implemented**. The root `main.js` is a stub Electron window. Read the IMPLEMENTATION.md files in each directory before implementing any module.
+| Component | Status | Key Files |
+|---|---|---|
+| Main Menu UI | **Done** | `host/ui/menu.html`, `host/ui/menu.js` |
+| Preload Bridge | **Done** | `host/src/preload.js` |
+| Game Sandbox | **Done** | `game-sandbox/src/sandbox.js` |
+| Pack Loader | **Done** | `host/src/packLoader.js` |
+| Socket Server | **Done** | `host/src/socketServer.js` |
+| HTTP Server | **Done** | `host/src/httpServer.js` |
+| Game Runner | **Done** | `host/src/gameRunner.js` |
+| Network Discovery | **Done** | `host/src/networkDiscovery.js` |
+| State Store | **Done** | `host/src/stateStore.js` |
+| Host Main (wired) | **Done** | `host/src/main.js` |
+| Board Shell | Not started | `board-shell/src/` |
+| Player Shell | Not started | `player-shell/src/` |
+| Platform SDK | Stub only | served by httpServer at `/platform-sdk.js` |
+| Example Tic-Tac-Toe | Not started | `example-games/example-tictactoe/` |
 
-Suggested implementation order (from README):
+See `TODO.md` for the full checklist with suggested tests per phase.
 
-1. `DOCS/MANIFEST_SPEC.md` → `DOCS/SOCKET_API.md` → `host/IMPLEMENTATION.md` → `game-sandbox/IMPLEMENTATION.md` → shells → `example-games/example-tictactoe/IMPLEMENTATION.md`
+## Key Dependencies
+
+| Package | Purpose |
+|---|---|
+| `electron` (dev) | Desktop shell + board display |
+| `socket.io` | WebSocket hub (server) |
+| `socket.io-client` (dev) | Testing only |
+| `express` | HTTP server for player phones |
+| `adm-zip` | Read/extract .boardgame ZIPs |
+| `get-port` | Dynamic port selection (ESM — use `await import()`) |
+| `semver` | Version comparison for manifest validation |
+| `bonjour` | mDNS LAN advertisement |
+| `qrcode` | QR code generation for join URLs |
+| `cross-env` (dev) | Cross-platform env vars in npm scripts |
+
+### ESM Note
+
+`get-port` v7+ is ESM-only. It must be loaded via dynamic `import()` inside an async function, not `require()`. See `startServer()` in `host/src/main.js`.
+
+## Testing
+
+No formal test runner is set up yet. Quick verification patterns used during development:
+
+```bash
+# Verify sandbox blocks dangerous APIs
+node -e "const { Worker } = require('worker_threads'); ..."
+
+# Test packLoader with a programmatically-created .boardgame ZIP
+node -e "const packLoader = require('./host/src/packLoader'); ..."
+
+# Integration test: socketServer + gameRunner message routing
+# Requires socket.io-client (devDependency)
+```
+
+`stateStore.js` requires Electron's `app.getPath()` and cannot be tested in plain Node.js.

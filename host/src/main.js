@@ -3,7 +3,25 @@ const path = require('path');
 const fs = require('fs');
 const AdmZip = require('adm-zip');
 
+const packLoader = require('./packLoader');
+const { createHttpServer } = require('./httpServer');
+const SocketServer = require('./socketServer');
+const GameRunner = require('./gameRunner');
+const StateStore = require('./stateStore');
+const networkDiscovery = require('./networkDiscovery');
+
 const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+
+// ─── Subsystem Instances ──────────────────────────────────────────────────────
+
+let httpCtx = null;      // { app, httpServer, mountPackAssets, unmountPackAssets }
+let socketServer = null;  // SocketServer
+let gameRunner = null;    // GameRunner (created per game session)
+let stateStore = null;    // StateStore
+let serverPort = null;    // resolved port
+
+// Current loaded game
+let currentPack = null;   // { manifest, packDir, warnings }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
@@ -57,7 +75,6 @@ function scanLibrary(libraryPath) {
       const manifest = JSON.parse(manifestEntry.getData().toString('utf8'));
       if (!manifest.id || !manifest.name || !manifest.version) continue;
 
-      // Extract icon to a temp data URL if present
       let iconDataUrl = null;
       if (manifest.assets?.icon) {
         const iconEntry = zip.getEntry(manifest.assets.icon);
@@ -131,6 +148,180 @@ function createWindow(settings) {
   });
 }
 
+function pushPlayersUpdate(players) {
+  if (mainWindow) {
+    mainWindow.webContents.send('menu:players-update', players);
+  }
+}
+
+// ─── Server Startup ───────────────────────────────────────────────────────────
+
+async function startServer() {
+  // HTTP + Express
+  httpCtx = createHttpServer();
+
+  // Socket.io attaches to the HTTP server
+  socketServer = new SocketServer();
+  socketServer.attach(httpCtx.httpServer);
+
+  // Push player list changes to the menu UI
+  socketServer.on('player-list-changed', (players) => {
+    pushPlayersUpdate(players);
+  });
+
+  // State persistence: listen for save-state events from the game
+  stateStore = new StateStore();
+  socketServer.on('save-state', (payload) => {
+    if (currentPack?.manifest && payload?.state) {
+      const players = socketServer.getPlayersForGameInit();
+      stateStore.save(currentPack.manifest, players, payload.state);
+    }
+  });
+
+  // Dynamic port selection
+  // get-port v7 is ESM-only, so we use a dynamic import
+  const { default: getPort, portNumbers } = await import('get-port');
+  serverPort = await getPort({ port: portNumbers(3000, 3100) });
+
+  // Start listening
+  await new Promise((resolve) => {
+    httpCtx.httpServer.listen(serverPort, '0.0.0.0', resolve);
+  });
+  console.log(`[HOST] HTTP + WebSocket server listening on port ${serverPort}`);
+
+  // mDNS + QR
+  networkDiscovery.advertise(serverPort);
+  const joinInfo = await networkDiscovery.generateJoinInfo(serverPort);
+  console.log(`[HOST] Join URL: ${joinInfo.joinUrl}`);
+
+  // Send server info to the menu renderer
+  if (mainWindow) {
+    mainWindow.webContents.send('menu:server-ready', {
+      port: serverPort,
+      joinUrl: joinInfo.joinUrl,
+      qrDataUrl: joinInfo.qrDataUrl,
+    });
+  }
+}
+
+// ─── Game Session Lifecycle ───────────────────────────────────────────────────
+
+async function loadGamePack(filePath) {
+  // Clean up previous pack if any
+  if (currentPack) {
+    if (gameRunner?.isRunning) {
+      gameRunner.stop();
+    }
+    httpCtx.unmountPackAssets();
+    packLoader.cleanup(currentPack.packDir);
+    currentPack = null;
+  }
+
+  // Load + validate
+  const result = packLoader.load(filePath);
+  currentPack = result;
+
+  if (result.warnings.length > 0) {
+    console.warn('[PACK] Warnings:', result.warnings);
+  }
+
+  // Mount pack assets for player HTTP access
+  httpCtx.mountPackAssets(result.packDir);
+
+  // Tell socket server about the new game
+  socketServer.loadGame(result.manifest);
+
+  console.log(`[HOST] Loaded pack: ${result.manifest.name} v${result.manifest.version}`);
+
+  return {
+    ok: true,
+    name: result.manifest.name,
+    id: result.manifest.id,
+    version: result.manifest.version,
+    warnings: result.warnings,
+    players: result.manifest.players,
+  };
+}
+
+async function startGame() {
+  if (!currentPack) {
+    return { ok: false, error: 'No pack loaded' };
+  }
+
+  const { manifest, packDir } = currentPack;
+
+  // Create a new GameRunner for this session
+  gameRunner = new GameRunner();
+
+  // Wire into socket server
+  socketServer.setGameRunner(gameRunner);
+
+  gameRunner.on('error', (err) => {
+    console.error('[GAME] Error:', err.message);
+    // Notify board display
+    if (mainWindow) {
+      mainWindow.webContents.send('menu:game-error', { message: err.message });
+    }
+  });
+
+  gameRunner.on('exit', (code) => {
+    console.log(`[GAME] Sandbox exited with code ${code}`);
+    socketServer.endGame();
+    gameRunner = null;
+  });
+
+  gameRunner.on('ready', () => {
+    console.log('[GAME] Game sandbox ready');
+    // Notify existing lobby players that they are connected
+    socketServer.notifyExistingPlayersConnected();
+
+    // Restore state if applicable
+    if (manifest.capabilities?.persistState) {
+      const saved = stateStore.load(manifest);
+      if (saved) {
+        console.log(`[GAME] Restoring saved state from ${saved.savedAt}`);
+        gameRunner.send({
+          type: 'RESTORE_STATE',
+          payload: saved,
+        });
+      }
+    }
+  });
+
+  // Start the sandbox
+  await gameRunner.start(packDir, manifest);
+
+  // Send GAME_INIT
+  const players = socketServer.getPlayersForGameInit();
+  gameRunner.send({
+    type: 'GAME_INIT',
+    payload: {
+      players,
+      settings: {},
+      locale: manifest.locales?.default || 'en',
+      platformVersion: packLoader.PLATFORM_VERSION,
+      packVersion: manifest.version,
+    },
+  });
+
+  return { ok: true };
+}
+
+function stopGame() {
+  if (gameRunner?.isRunning) {
+    // Save state before stopping if applicable
+    if (currentPack?.manifest?.capabilities?.persistState) {
+      gameRunner.requestStateSave('quit');
+      // Give 3s for save, then kill
+      setTimeout(() => {
+        gameRunner?.stop();
+      }, 3000);
+    } else {
+      gameRunner.stop();
+    }
+  }
+}
+
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
 
 ipcMain.handle('menu:settings-get', () => {
@@ -139,7 +330,6 @@ ipcMain.handle('menu:settings-get', () => {
 
 ipcMain.handle('menu:settings-save', (_event, newSettings) => {
   saveSettings(newSettings);
-  // Apply fullscreen change immediately
   if (mainWindow) {
     mainWindow.setFullScreen(!!newSettings.fullscreen);
   }
@@ -160,30 +350,45 @@ ipcMain.handle('menu:browse-library', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('menu:load-game', (_event, filePath) => {
-  // TODO (Phase 2): validate pack and transition to lobby
-  // For now, just acknowledge
-  return { ok: true, filePath };
+ipcMain.handle('menu:load-game', async (_event, filePath) => {
+  try {
+    return await loadGamePack(filePath);
+  } catch (err) {
+    console.error('[HOST] Failed to load pack:', err.message);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('menu:start-game', async () => {
+  try {
+    return await startGame();
+  } catch (err) {
+    console.error('[HOST] Failed to start game:', err.message);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('menu:stop-game', () => {
+  stopGame();
+  return { ok: true };
 });
 
 ipcMain.on('menu:exit', () => {
   app.quit();
 });
 
-// ─── Connected Players (stubbed — wired to socketServer in Phase 2) ───────────
-
-// Phase 2 will call pushPlayersUpdate() whenever a player connects/disconnects.
-function pushPlayersUpdate(players) {
-  if (mainWindow) {
-    mainWindow.webContents.send('menu:players-update', players);
-  }
-}
-
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const settings = loadSettings();
   createWindow(settings);
+
+  // Start the HTTP + WS server immediately so players can connect
+  try {
+    await startServer();
+  } catch (err) {
+    console.error('[HOST] Failed to start server:', err);
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -197,4 +402,14 @@ app.on('activate', () => {
   }
 });
 
-module.exports = { pushPlayersUpdate };
+app.on('before-quit', () => {
+  stopGame();
+  packLoader.cleanupAll();
+  networkDiscovery.stopAdvertising();
+  socketServer?.close();
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[HOST] Uncaught exception:', err);
+  packLoader.cleanupAll();
+});
