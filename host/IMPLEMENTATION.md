@@ -9,7 +9,7 @@
 ## Technology Choices
 
 | Concern | Choice | Why |
-|---|---|---|
+| --- | --- | --- |
 | Desktop shell | **Electron** | Single binary, ships Chromium for board view, full Node access |
 | WebSocket server | **Socket.io** | Handles reconnection, rooms, namespaces cleanly |
 | Pack extraction | **adm-zip** | Pure JS, no native deps, handles ZIP reliably |
@@ -22,7 +22,7 @@
 
 ## File Structure
 
-```
+```text
 host/
 ├── package.json
 ├── src/
@@ -40,6 +40,7 @@ host/
 ## `main.js` — Electron Entry Point
 
 ### Responsibilities
+
 - Create the main `BrowserWindow` (board display, fullscreen or maximized)
 - Initialize all subsystems in order
 - Wire IPC between main process and board renderer
@@ -47,7 +48,7 @@ host/
 
 ### Startup Sequence
 
-```
+```text
 1. App ready
 2. Create BrowserWindow (blank loading screen)
 3. Start httpServer (Express)         → get assigned port
@@ -78,6 +79,7 @@ const win = new BrowserWindow({
 ```
 
 The board HTML is loaded as a local file:
+
 ```js
 win.loadFile(path.join(packExtractDir, manifest.entry.board));
 ```
@@ -87,7 +89,7 @@ However, the board HTML must NOT have direct Node/IPC access. Use preload.js to 
 ### IPC Channels (main ↔ board renderer)
 
 | Channel | Direction | Description |
-|---|---|---|
+| --- | --- | --- |
 | `platform:message` | main → renderer | Forward WS messages to board |
 | `platform:send` | renderer → main | Board sends event to host |
 | `platform:init` | main → renderer | Board init payload |
@@ -96,7 +98,8 @@ However, the board HTML must NOT have direct Node/IPC access. Use preload.js to 
 
 ## `packLoader.js` — Pack Validation and Extraction
 
-### Responsibilities
+### packLoader Responsibilities
+
 - Accept a `.boardgame` file path
 - Extract to a temp directory: `os.tmpdir()/boardgame-{id}-{timestamp}/`
 - Read and validate `manifest.json` against the spec
@@ -118,6 +121,7 @@ However, the board HTML must NOT have direct Node/IPC access. Use preload.js to 
 ### Security Checks
 
 Before extracting, scan all ZIP entries for:
+
 - **Path traversal**: Any entry whose resolved path escapes the temp dir (e.g., `../../etc/passwd`) must throw a hard error and delete the partial extraction.
 - **Symlinks**: Reject any ZIP entries that are symbolic links.
 - **Executables**: Log a warning if any `.exe`, `.sh`, `.bat`, `.command` files are found. Do not execute them.
@@ -136,6 +140,7 @@ for (const entry of zip.getEntries()) {
 ### Cleanup
 
 Register cleanup on:
+
 - App quit (`app.on('before-quit')`)
 - Game session end (when a new pack is loaded)
 - Electron crash (`process.on('uncaughtException')`)
@@ -146,7 +151,8 @@ Use `fs.rm(tmpDir, { recursive: true, force: true })`.
 
 ## `socketServer.js` — WebSocket Hub
 
-### Responsibilities
+### socketServer Responsibilities
+
 - Manage all incoming WebSocket connections (board + players)
 - Classify connections (board vs player) and maintain a registry
 - Route messages between participants according to `DOCS/SOCKET_API.md`
@@ -240,6 +246,7 @@ function routeFromGame(msg) {
 ### Reconnection Handling
 
 When a player reconnects (sends `REQUEST_REJOIN` with stored `playerId`):
+
 1. Validate `playerId` exists in registry
 2. Reassign socket to existing player entry
 3. Mark player as `connected: true`
@@ -251,14 +258,15 @@ When a player reconnects (sends `REQUEST_REJOIN` with stored `playerId`):
 
 ## `httpServer.js` — Express Server for Player Clients
 
-### Responsibilities
+### httpServer Responsibilities
+
 - Serve the player shell HTML to phones
 - Serve game pack assets (images, fonts, audio) to phones
 - Serve the player game iframe HTML from the pack
 
 ### Routes
 
-```
+```text
 GET /                    → player shell (player-shell/src/index.html)
 GET /shell.js            → player-shell/src/shell.js
 GET /shell.css           → player-shell/src/overlay.css
@@ -269,6 +277,7 @@ GET /join                → join landing page with QR code fallback
 ### Player Shell Entry Point
 
 The `/` route serves a tiny HTML file that:
+
 1. Shows a "Connecting..." spinner
 2. Loads `shell.js` which opens a WebSocket connection to the host
 3. After `PLAYER_JOIN` is received, loads the game's `player/hand.html` in an iframe
@@ -278,6 +287,7 @@ The player shell must be served from the same origin as the WebSocket server.
 ### Asset Serving Security
 
 The `/game/*` route maps to the extracted pack directory. Apply:
+
 - `express.static(packDir)` with `dotfiles: 'deny'`
 - Disallow directory listing: `index: false`
 - Content-Type sniffing disabled: `X-Content-Type-Options: nosniff`
@@ -296,7 +306,8 @@ Store the resolved port so `networkDiscovery.js` can advertise it.
 
 ## `networkDiscovery.js` — mDNS + QR Code
 
-### Responsibilities
+### netwrokDiscovery Responsibilities
+
 - Advertise the host on the local network so phones can find it
 - Generate a QR code containing the join URL
 - Display the QR code on the board display (via IPC)
@@ -347,7 +358,8 @@ The board shell displays this in the lobby overlay.
 
 ## `gameRunner.js` — Game Sandbox Lifecycle
 
-### Responsibilities
+### gameRunner Responsibilities
+
 - Start and stop the game sandbox (see `game-sandbox/IMPLEMENTATION.md`)
 - Relay messages between HOST and sandbox
 - Handle sandbox crashes gracefully
@@ -368,7 +380,7 @@ class GameRunner extends EventEmitter {
 ### Timeout Guards
 
 | Event | Timeout | Action on timeout |
-|---|---|---|
+| --- | --- | --- |
 | `GAME_READY` after `GAME_INIT` | 5000ms | Kill sandbox, show error |
 | `SAVE_STATE_RESPONSE` after `SAVE_STATE_REQUEST` | 3000ms | Log warning, proceed without save |
 
@@ -376,14 +388,15 @@ class GameRunner extends EventEmitter {
 
 ## `stateStore.js` — State Persistence
 
-### Responsibilities
+### stateStore Responsibilities
+
 - Save game state blobs to disk
 - Load saved state on game start
 - Manage save file location
 
 ### Storage Location
 
-```
+```text
 {userData}/saves/{packId}/{packMajorVersion}/latest.json
 ```
 

@@ -9,6 +9,7 @@
 ## What the Board Shell Is (and Isn't)
 
 The board shell is **not** the game's board UI. It's the container that:
+
 - Shows the join QR code before the game starts
 - Shows connected players in the lobby
 - Hosts `board.html` from the pack in a sandboxed `<iframe>`
@@ -21,7 +22,7 @@ The game's `board.html` renders the actual board (tiles, tokens, cards) inside t
 
 ## File Structure
 
-```
+```text
 board-shell/src/
 ├── index.html       ← Loaded by Electron BrowserWindow
 ├── shell.js         ← Platform logic: IPC bridge, iframe lifecycle, lobby
@@ -93,6 +94,7 @@ Minimal structure — the shell does as little visual work as possible during ga
 ## `shell.js`
 
 ### Responsibilities
+
 1. Receive platform events from Electron main process via `window.__ipc` (injected by preload.js)
 2. Manage screen transitions (lobby → settings → game → gameover)
 3. Mount game `board.html` in the iframe at the right time
@@ -235,7 +237,7 @@ However, you should inject `window.platform` into the board iframe via a script 
 
 The host serves `platform-sdk.js` from the shell:
 
-```
+```text
 GET /platform-sdk.js  →  board-shell/src/platform-sdk.js
 ```
 
@@ -328,6 +330,7 @@ document.getElementById('quit-btn').addEventListener('click', () => {
 ## `overlay.css`
 
 Key constraints:
+
 - Use a CSS namespace prefix (`#board-shell-*`, `.bgs-*`) to avoid any collision with game CSS.
 - The `#game-screen` must be `position: relative; width: 100vw; height: 100vh`.
 - The `#board-frame` inside it must be `position: absolute; inset: 0; width: 100%; height: 100%; border: none`.

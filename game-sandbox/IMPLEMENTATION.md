@@ -8,6 +8,7 @@
 ## Why a Sandbox?
 
 `server/game.js` is third-party code. Even for personal use, a sandbox prevents:
+
 - Accidental `require('fs')` calls that wipe files
 - Accidental infinite loops that freeze the host process
 - Network calls from game scripts
@@ -19,7 +20,7 @@
 
 The recommended approach uses Node.js **Worker Threads** as the isolation layer, combined with a restricted module system inside the worker.
 
-```
+```text
 Host Process (main.js)
     │
     │ worker_threads.Worker
@@ -44,6 +45,7 @@ A child process (`child_process.fork`) would work but requires serializing all m
 ## `sandbox.js` — Worker Entry Point
 
 This file runs inside a Worker thread. It:
+
 1. Receives the game script source code from the parent
 2. Builds the `GameContext` object
 3. Executes the script in a `vm.runInNewContext` context

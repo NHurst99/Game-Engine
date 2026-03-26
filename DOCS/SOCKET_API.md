@@ -38,7 +38,7 @@ interface Message {
 
 ## Initialization Flow
 
-```
+```text
 HOST         GAME          BOARD         PLAYER
  │            │              │              │
  │──GAME_INIT─►│              │              │
@@ -746,7 +746,7 @@ document.getElementById('end-turn-btn').addEventListener('click', () => {
 ## Event Routing Table (Quick Reference)
 
 | Event | Origin | Destination | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `GAME_INIT` | HOST | GAME | Once on game start |
 | `RESTORE_STATE` | HOST | GAME | Only if persistState + saved state exists |
 | `PLAYER_CONNECTED` | HOST | GAME, BOARD | On connect/reconnect |

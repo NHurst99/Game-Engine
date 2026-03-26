@@ -226,7 +226,7 @@ Every `.boardgame` pack must contain a `manifest.json` at its root. This file is
 The platform performs the following checks when loading a pack. A **hard failure** aborts loading. A **warning** proceeds but notifies the host.
 
 | Check | Severity |
-|---|---|
+| --- | --- |
 | `manifest.json` is valid JSON | Hard failure |
 | `id` matches pattern `^[a-z0-9]+(\.[a-z0-9]+)+$` | Hard failure |
 | `version` matches semver pattern | Hard failure |
@@ -293,6 +293,7 @@ The smallest valid `manifest.json`:
 ## Versioning and Pack Updates
 
 When the platform detects a pack with the same `id` but a different `version` already loaded:
+
 - If major version changed: warn host, do not auto-replace
 - If minor/patch version changed: silently replace, keep saved state if `persistState: true`
 
@@ -303,7 +304,7 @@ Saved state is namespaced as `{id}@{major}.x` so minor updates don't break saves
 ## File Size Limits
 
 | Category | Limit |
-|---|---|
+| --- | --- |
 | Total pack size | 500 MB |
 | Single asset file | 100 MB |
 | `server/game.js` (and all required files) | 10 MB |

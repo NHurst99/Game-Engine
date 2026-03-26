@@ -7,6 +7,7 @@ This guide is for people who want to **create a game** for the BoardGame Platfor
 ## What You're Building
 
 A `.boardgame` file is a ZIP archive with a specific structure. When loaded by the platform, your game gets:
+
 - A TV/monitor displaying your `board.html`
 - Each player's phone displaying your `player/hand.html`
 - Your `server/game.js` running as the authoritative game brain
@@ -15,7 +16,7 @@ A `.boardgame` file is a ZIP archive with a specific structure. When loaded by t
 
 ## Minimal Pack Structure
 
-```
+```text
 my-game/
 ├── manifest.json       ← Required. Describes your game.
 ├── server/
@@ -134,7 +135,7 @@ function syncAll() {
 ### `ctx` Reference
 
 | Method | Description |
-|---|---|
+| --- | --- |
 | `ctx.on(type, fn)` | Listen for events from the platform |
 | `ctx.emit(type, payload, to)` | Send events to the platform |
 | `ctx.log(msg)` | Write to the debug log |
@@ -149,7 +150,7 @@ function syncAll() {
 ### Events Your Script Receives
 
 | Event | When |
-|---|---|
+| --- | --- |
 | `GAME_INIT` | Game is starting. Initialize your state here. |
 | `RESTORE_STATE` | A saved state exists (if `persistState: true` in manifest). Restore it. |
 | `PLAYER_CONNECTED` | A player's phone connected (or reconnected). |
@@ -161,7 +162,7 @@ function syncAll() {
 ### Events Your Script Can Send
 
 | Event | Effect |
-|---|---|
+| --- | --- |
 | `GAME_READY` | Required. Tells platform you're initialized. |
 | `UPDATE_BOARD` | Refreshes the TV display. |
 | `UPDATE_PLAYER` | Refreshes one player's phone. Requires `to: "player:p1"`. |
@@ -368,6 +369,7 @@ Place assets anywhere in your pack folder. Reference them with relative paths fr
 ### Fonts
 
 Declare in manifest:
+
 ```json
 "assets": {
   "fonts": [
@@ -375,11 +377,13 @@ Declare in manifest:
   ]
 }
 ```
+
 The platform injects the `@font-face` rule into both board and player HTML before they load.
 
 ### Audio
 
 Declare in manifest:
+
 ```json
 "assets": {
   "audio": { "preload": ["assets/audio/roll.ogg", "assets/audio/win.ogg"] }
@@ -395,6 +399,7 @@ Play via: `window.platform.playAudio('roll')` (use filename without extension as
 Add `"lobby": "lobby/lobby.html"` to `entry` in your manifest. This replaces the platform's default lobby on the TV. Your lobby HTML receives `LOBBY_STATE` events via postMessage.
 
 You should still render a "Start Game" button that fires:
+
 ```js
 window.parent.postMessage({ type: 'HOST_START_GAME', payload: {} }, '*');
 ```
@@ -426,6 +431,7 @@ The payload is passed to your `server/game.js` as `payload.settings` in `GAME_IN
 In manifest: `"capabilities": { "persistState": true }`
 
 In `server/game.js`:
+
 ```js
 ctx.on('SAVE_STATE_REQUEST', () => {
   ctx.emit('SAVE_STATE_RESPONSE', { state: myState });
@@ -448,6 +454,7 @@ ctx.on('RESTORE_STATE', (payload) => {
 4. Use mobile browser devtools for your player HTML.
 
 Common issues:
+
 - **"GAME_READY not received"**: Your `server/game.js` crashed on load or forgot to call `ctx.emit('GAME_READY', ...)`.
 - **"Asset not found"**: Check paths. Assets inside iframes use `/game/` prefix for absolute paths.
 - **Players see blank screen**: Check for errors in the browser console. The iframe may have failed to load.

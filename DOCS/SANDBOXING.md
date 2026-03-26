@@ -28,7 +28,7 @@ This guides the security decisions below: we prioritize isolation and crash-safe
 ### What's Blocked
 
 | API | Blocked? | Why |
-|---|---|---|
+| --- | --- | --- |
 | `require()` | ✅ Yes | Not exposed in vm context |
 | `import()` | ✅ Yes | Not a module context |
 | `process` | ✅ Yes | Not in context |
@@ -42,7 +42,7 @@ This guides the security decisions below: we prioritize isolation and crash-safe
 ### What's Available
 
 | API | Available? | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `ctx` | ✅ Yes | Full GameContext API |
 | `console.log/warn/error` | ✅ Yes | Routes to host log only |
 | `Math`, `JSON` | ✅ Yes | Safe standard globals |
@@ -75,7 +75,7 @@ The recommended sandbox attribute:
 ```
 
 | Flag | Effect |
-|---|---|
+| --- | --- |
 | `allow-scripts` | Game JS can run |
 | `allow-same-origin` | Allows reading/writing to the same origin — needed for some canvas APIs |
 | `allow-forms` | **Not included** — prevents form submission navigation |
@@ -87,6 +87,7 @@ The recommended sandbox attribute:
 On the player's phone, `player/hand.html` is served via HTTP from the host. Same-origin here means the iframe and the shell share the same HTTP origin (e.g. `http://192.168.1.5:3000`). Pack JS in the iframe cannot access the shell's DOM because of the iframe boundary, but it can make `fetch()` requests to `http://192.168.1.5:3000`.
 
 **To prevent pack player HTML from making arbitrary requests:**
+
 - Option A: Serve the pack's player HTML from a different port (e.g. `:3001`) than the WebSocket/shell (`:3000`). Then the player iframe is a different origin, and you can use a strict sandbox.
 - Option B: Accept this for a local home game and document it.
 
@@ -151,7 +152,7 @@ The platform opens a port on the local machine. Consider:
 
 If you want defense against `vm` sandbox escapes, run the game script in a subprocess instead of a Worker thread:
 
-```
+```text
 host process
     │
     │ child_process.fork()
@@ -163,11 +164,13 @@ server/game.js
 ```
 
 Benefits:
+
 - Subprocess can be given `--max-old-space-size=128` to cap memory
 - Subprocess crash doesn't affect the host process
 - OS-level process isolation
 
 Drawbacks:
+
 - Higher message latency (IPC over pipe vs. shared memory)
 - More complex lifecycle management
 - Subprocess stdout/stderr must be captured separately
@@ -179,7 +182,7 @@ For a version 1.0 local game platform, Worker threads are the right call. Add su
 ## Summary Table
 
 | Layer | Mechanism | Protects Against |
-|---|---|---|
+| --- | --- | --- |
 | Game script | Worker thread + vm.runInContext | Accidental Node API use, crashes isolated |
 | Game script | Restricted context (no require) | Filesystem, network access |
 | Game script | Synchronous timeout | Top-level infinite loops |

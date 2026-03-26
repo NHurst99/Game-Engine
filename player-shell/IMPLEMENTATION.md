@@ -18,7 +18,7 @@
 
 ## File Structure
 
-```
+```text
 player-shell/src/
 ├── index.html       ← Entry point served to phones
 ├── shell.js         ← WebSocket client, join flow, iframe lifecycle

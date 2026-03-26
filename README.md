@@ -14,7 +14,7 @@ Games are distributed as **`.boardgame` files** (renamed ZIPs) — fully self-co
 
 ## Repository Structure
 
-```
+```text
 boardgame-platform/
 ├── README.md                        ← You are here
 ├── DOCS/
@@ -62,7 +62,7 @@ boardgame-platform/
 
 ## How It All Connects
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    HOST MACHINE (TV/PC)                  │
 │                                                          │
@@ -107,18 +107,23 @@ boardgame-platform/
 ## Key Design Decisions
 
 ### Why iframes for game UI?
+
 Game pack HTML runs inside `<iframe sandbox>` elements. This:
+
 - Isolates pack CSS from platform CSS
 - Prevents pack JS from accessing other players' DOM
 - Lets the platform control what APIs are exposed (only postMessage)
 
 ### Why a single WebSocket hub on the host?
+
 The game server script does NOT open its own network connections. It communicates only via the sandbox API (`emit`, `on`). The host's WebSocket hub routes all messages. This means:
+
 - Game packs can't do arbitrary network requests
 - All messages are logged/inspectable
 - The host controls the connection lifecycle
 
 ### Why `.boardgame` files (ZIPs)?
+
 - Single file to share/download
 - Trivially inspectable (rename to `.zip`, open it)
 - No install step — just load in the platform
@@ -129,6 +134,7 @@ The game server script does NOT open its own network connections. It communicate
 ## Getting Started (for implementors)
 
 Read the IMPLEMENTATION.md files in this order:
+
 1. `DOCS/MANIFEST_SPEC.md` — understand the pack format first
 2. `DOCS/SOCKET_API.md` — understand the event protocol
 3. `host/IMPLEMENTATION.md` — build the core
