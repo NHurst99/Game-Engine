@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f172a">
+  <title>BoardGame</title>
+  <link rel="stylesheet" href="/shell.css">
+</head>
+<body>
+
+  <!-- Join screen -->
+  <div id="join-screen" class="screen active">
+    <div class="join-content">
+      <h1 id="join-title">BoardGame Platform</h1>
+      <form id="join-form">
+        <input
+          id="player-name-input"
+          type="text"
+          placeholder="Your name"
+          maxlength="24"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="words"
+          spellcheck="false"
+          required
+        >
+        <button type="submit" id="join-btn">Join</button>
+      </form>
+      <div id="join-status" class="join-status"></div>
+    </div>
+  </div>
+
+  <!-- Lobby screen -->
+  <div id="lobby-screen" class="screen">
+    <div class="lobby-content">
+      <h2 id="lobby-game-name"></h2>
+      <div id="lobby-your-name" class="lobby-your-name"></div>
+      <div id="lobby-players-list" class="lobby-players-list"></div>
+      <button id="ready-btn" class="btn-ready">Ready</button>
+      <div id="lobby-status" class="lobby-status">Waiting for all players...</div>
+    </div>
+  </div>
+
+  <!-- Game screen -->
+  <div id="game-screen" class="screen">
+    <iframe
+      id="player-frame"
+      sandbox="allow-scripts allow-same-origin"
+      allowfullscreen
+    ></iframe>
+    <div id="connection-pill" class="connection-pill connected"></div>
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <!-- Disconnect overlay -->
+  <div id="disconnect-overlay" class="disconnect-overlay hidden">
+    <div class="disconnect-content">
+      <div class="disconnect-icon">⚡</div>
+      <div>Connection lost</div>
+      <div id="reconnect-countdown" class="reconnect-text">Reconnecting...</div>
+    </div>
+  </div>
+
+  <!-- Game over screen -->
+  <div id="gameover-screen" class="screen">
+    <div class="gameover-content">
+      <h1>Game Over</h1>
+      <div id="gameover-message" class="gameover-message"></div>
+      <div id="gameover-score" class="gameover-score"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/shell.js"></script>
+</body>
+</html>

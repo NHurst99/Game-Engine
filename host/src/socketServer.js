@@ -64,6 +64,17 @@ class SocketServer extends EventEmitter {
     this.gamePhase = 'in_progress';
 
     gameRunner.on('message', (msg) => this._routeFromGame(msg));
+
+    // Notify all players that game has started
+    const playerHtmlPath = this.manifest?.entry?.player
+      ? `/game/${this.manifest.entry.player}` : '/game/player/hand.html';
+    const startMsg = {
+      type: 'GAME_STARTED',
+      payload: { playerHtmlPath },
+    };
+    for (const p of this.players.values()) {
+      p.socket?.emit('message', startMsg);
+    }
   }
 
   /**
@@ -208,6 +219,9 @@ class SocketServer extends EventEmitter {
     socket._playerId = playerId;
 
     // Send PLAYER_JOIN to the joining player
+    const playerHtmlPath = this.manifest?.entry?.player
+      ? `/game/${this.manifest.entry.player}` : '/game/player/hand.html';
+
     socket.emit('message', {
       type: 'PLAYER_JOIN',
       payload: {
@@ -218,6 +232,7 @@ class SocketServer extends EventEmitter {
         gameId: this.manifest?.id || '',
         playerCount: this.players.size,
         locale: this.manifest?.locales?.default || 'en',
+        playerHtmlPath,
         status: 'lobby',
       },
     });
@@ -253,6 +268,9 @@ class SocketServer extends EventEmitter {
     }
 
     // Send current state to reconnected player
+    const rejoinPlayerHtmlPath = this.manifest?.entry?.player
+      ? `/game/${this.manifest.entry.player}` : '/game/player/hand.html';
+
     if (this.gamePhase === 'lobby') {
       socket.emit('message', {
         type: 'PLAYER_JOIN',
@@ -264,6 +282,7 @@ class SocketServer extends EventEmitter {
           gameId: this.manifest?.id || '',
           playerCount: this.players.size,
           locale: this.manifest?.locales?.default || 'en',
+          playerHtmlPath: rejoinPlayerHtmlPath,
           status: 'lobby',
         },
       });
@@ -279,6 +298,7 @@ class SocketServer extends EventEmitter {
           gameId: this.manifest?.id || '',
           playerCount: this.players.size,
           locale: this.manifest?.locales?.default || 'en',
+          playerHtmlPath: rejoinPlayerHtmlPath,
           status: 'in_progress',
         },
       });
@@ -359,6 +379,8 @@ class SocketServer extends EventEmitter {
     switch (msg.to) {
       case 'board':
         this.board?.emit('message', msg);
+        // Also emit for Electron IPC relay to board shell
+        this.emit('board-message', msg);
         break;
 
       case 'all_players':
@@ -375,6 +397,7 @@ class SocketServer extends EventEmitter {
         // Broadcast events: GAME_STARTED, GAME_OVER → board + all players
         if (msg.type === 'GAME_STARTED' || msg.type === 'GAME_OVER') {
           this.board?.emit('message', msg);
+          this.emit('board-message', msg);
           for (const p of this.players.values()) {
             p.socket?.emit('message', msg);
           }
@@ -388,6 +411,7 @@ class SocketServer extends EventEmitter {
         // PLAYER_CONNECTED → board + game (game already has it)
         if (msg.type === 'PLAYER_CONNECTED' || msg.type === 'PLAYER_DISCONNECTED') {
           this.board?.emit('message', msg);
+          this.emit('board-message', msg);
         }
         // Host-internal events: ERROR, SAVE_STATE_RESPONSE, __LOG__
         this._handleHostEvent(msg);
@@ -398,6 +422,7 @@ class SocketServer extends EventEmitter {
   _handleHostEvent(msg) {
     if (msg.type === 'ERROR' && msg.payload?.fatal) {
       this.board?.emit('message', msg);
+      this.emit('board-message', msg);
       for (const p of this.players.values()) {
         p.socket?.emit('message', msg);
       }
@@ -432,8 +457,9 @@ class SocketServer extends EventEmitter {
       },
     };
 
-    // Send to board
+    // Send to board (Socket.io + IPC)
     this.board?.emit('message', lobbyMsg);
+    this.emit('board-message', lobbyMsg);
 
     // Send to all players
     for (const p of this.players.values()) {

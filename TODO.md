@@ -112,31 +112,37 @@
 
 ---
 
-## Phase 3 — Shells ⬜
+## Phase 3 — Shells ✅
 
-- [ ] `board-shell/src/index.html` + `shell.js` + `overlay.css`
-  - Connect to host Socket.io
+- [x] `board-shell/src/index.html` + `shell.js` + `overlay.css`
   - Lobby screen: QR code display, player list, Start button (enabled when `canStart: true`)
-  - Mount pack `board.html` in `<iframe sandbox="allow-scripts">`
-  - Proxy `postMessage` ↔ WebSocket (`UPDATE_BOARD`, `BOARD_ACTION`, `BOARD_READY`, etc.)
-  - Inject `window.platform` into board iframe (via postMessage handshake)
+  - Mount pack `board.html` in `<iframe sandbox="allow-scripts allow-same-origin">`
+  - Proxy `postMessage` ↔ Electron IPC (`UPDATE_BOARD`, `BOARD_ACTION`, `BOARD_READY`, etc.)
+  - Inject `window.platform` into board iframe (via platform-sdk.js + postMessage)
   - Game-over screen with Play Again / Quit
-  - Connection status overlay
-- [ ] `player-shell/src/index.html` + `shell.js` + `overlay.css`
+  - Player connection status bar overlay
+  - Toast notifications
+- [x] `player-shell/src/index.html` + `shell.js` + `overlay.css`
   - Join screen: name input, submit
   - Lobby screen: player list, Ready button, waiting status
   - Mount pack `player/hand.html` in iframe
-  - Proxy `postMessage` ↔ WebSocket (`UPDATE_PLAYER`, `PLAYER_ACTION`, etc.)
-  - Inject `window.platform` with `playerId`, `playerName`, `playerIndex`
+  - Proxy `postMessage` ↔ Socket.io (`UPDATE_PLAYER`, `PLAYER_ACTION`, etc.)
+  - Inject `window.platform` with `playerId`, `playerName`, `playerIndex` via `PLATFORM_INIT`
   - Game-over screen
-  - Disconnect overlay with auto-reconnect
-- [ ] `/platform-sdk.js` — served by `httpServer`, injected into game iframes
-  - `window.platform.on(type, handler)` / `window.platform.once(type, handler)`
+  - Disconnect overlay with auto-reconnect (exponential backoff)
+  - sessionStorage-based player ID persistence for reconnection
+- [x] `/platform-sdk.js` — served by `httpServer`, injected into game iframes
+  - `window.platform.on(type, handler)` / `window.platform.once(type, handler)` / `off(type, handler)`
   - `window.platform.sendAction(action, data)` (player only)
-  - `window.platform.playAudio(clip, volume)`
-  - `window.platform.t(key, vars)` locale helper
-  - `window.platform.playerId` / `playerName` / `playerIndex`
+  - `window.platform.sendBoardAction(action, data)` (board only)
+  - `window.platform.ready()` — signal frame readiness
+  - `window.platform.whenReady()` — promise for PLATFORM_INIT
+  - `window.platform.playerId` / `playerName` / `playerIndex` / `gameName` / `locale`
   - `PLATFORM_INIT` bootstrap handshake
+- [x] QR code + join URL display on main menu sidebar
+- [x] Screen transition: menu → board shell lobby → game → game over → menu
+- [x] `board:message` IPC relay from socketServer to board shell
+- [x] `playerHtmlPath` added to `PLAYER_JOIN` and `GAME_STARTED` payloads
 
 ### Suggested Tests
 

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; frame-src *">
+  <title>BoardGame Platform</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body>
+
+  <!-- Lobby screen -->
+  <div id="lobby" class="screen active">
+    <div class="lobby-header">
+      <h1 id="lobby-game-name">Loading...</h1>
+      <div class="lobby-meta" id="lobby-meta"></div>
+    </div>
+
+    <div class="lobby-body">
+      <div class="lobby-qr-panel">
+        <img id="lobby-qr" class="lobby-qr" src="" alt="Scan to join">
+        <div id="lobby-join-url" class="lobby-join-url"></div>
+        <div class="lobby-hint">Scan with your phone to join</div>
+      </div>
+
+      <div class="lobby-players-panel">
+        <h2>Players</h2>
+        <div id="lobby-players" class="lobby-players"></div>
+        <div id="lobby-empty" class="lobby-empty">Waiting for players to join...</div>
+      </div>
+    </div>
+
+    <div class="lobby-footer">
+      <button id="lobby-back-btn" class="btn btn-ghost">← Back</button>
+      <button id="lobby-start-btn" class="btn btn-primary" disabled>Start Game</button>
+    </div>
+  </div>
+
+  <!-- Game screen -->
+  <div id="game-screen" class="screen">
+    <iframe
+      id="board-frame"
+      sandbox="allow-scripts allow-same-origin"
+      allowfullscreen
+    ></iframe>
+
+    <!-- Overlays on top of iframe -->
+    <div id="player-status-bar" class="player-status-bar"></div>
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <!-- Game over screen -->
+  <div id="gameover-screen" class="screen">
+    <div class="gameover-content">
+      <h1 id="gameover-title">Game Over</h1>
+      <div id="gameover-winner" class="gameover-winner"></div>
+      <div id="gameover-scores" class="gameover-scores"></div>
+      <div class="gameover-actions">
+        <button id="play-again-btn" class="btn btn-primary">Play Again</button>
+        <button id="quit-btn" class="btn btn-ghost">Quit to Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="shell.js"></script>
+</body>
+</html>

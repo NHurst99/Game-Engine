@@ -16,6 +16,13 @@ async function init() {
 
   // Subscribe to player connection updates from main process
   platform.on('menu:players-update', renderPlayers);
+
+  // Subscribe to server ready event for QR code + join URL
+  platform.on('menu:server-ready', onServerReady);
+
+  // If server is already running (e.g. returning from board shell), get info now
+  const existingInfo = await platform.invoke('menu:get-server-info');
+  if (existingInfo) onServerReady(existingInfo);
 }
 
 // ─── Game Library ─────────────────────────────────────────────────────────────
@@ -78,6 +85,28 @@ function selectGame(index) {
   document.getElementById('launch-meta').textContent =
     `${selectedGame.players.min}–${selectedGame.players.max} players  ·  v${selectedGame.version}`;
   document.getElementById('launch-bar').classList.add('visible');
+}
+
+// ─── Server Ready / QR Code ───────────────────────────────────────────────
+
+function onServerReady(info) {
+  // Show QR code and join URL in sidebar
+  const section = document.getElementById('join-info-section');
+  section.style.display = '';
+
+  if (info.qrDataUrl) {
+    document.getElementById('join-qr').src = info.qrDataUrl;
+  }
+  document.getElementById('join-url').textContent = info.joinUrl;
+
+  // Update header server status
+  const status = document.getElementById('server-status');
+  status.style.display = '';
+  document.getElementById('server-port').textContent = info.port;
+
+  // Update no-players message
+  document.getElementById('no-players').innerHTML =
+    'No players connected yet.<br>Scan the QR code or visit the URL above.';
 }
 
 // ─── Players Panel ────────────────────────────────────────────────────────────
@@ -146,10 +175,14 @@ function wireListeners() {
     if (e.target === e.currentTarget) closeSettings();
   });
 
-  // Launch
+  // Launch — load pack then transition to board shell lobby
   document.getElementById('btn-launch').addEventListener('click', async () => {
     if (!selectedGame) return;
-    await platform.invoke('menu:load-game', selectedGame.filePath);
+    const result = await platform.invoke('menu:load-game', selectedGame.filePath);
+    if (result && result.ok) {
+      // main.js will navigate the window to board-shell
+      await platform.invoke('menu:enter-lobby');
+    }
   });
 
   // Exit

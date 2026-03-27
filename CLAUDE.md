@@ -46,10 +46,13 @@ Game Sandbox (Worker thread)
   └── game-sandbox/src/sandbox.js — runs pack's server/game.js via vm.runInNewContext
 
 Board Display (Electron BrowserWindow)
-  └── board-shell/src/   — NOT YET IMPLEMENTED (Phase 3)
+  └── board-shell/src/   — lobby, game iframe, game-over screens (IPC bridge)
 
 Player Client (phone browser)
-  └── player-shell/src/  — NOT YET IMPLEMENTED (Phase 3)
+  └── player-shell/src/  — join, lobby, game iframe, disconnect/reconnect (Socket.io)
+
+Platform SDK (served to game iframes)
+  └── player-shell/src/platform-sdk.js — window.platform API for pack HTML
 
 Main Menu UI (Electron renderer)
   └── host/ui/menu.html + menu.js — game picker, player list, settings, exit
@@ -63,16 +66,22 @@ Main Menu UI (Electron renderer)
 4. Send `menu:server-ready` to renderer with port/joinUrl/qrDataUrl
 5. Phones can connect to the Socket.io server immediately (pre-game lobby)
 6. User selects a game → `menu:load-game` → packLoader validates + extracts → socketServer enters lobby
-7. User presses Start → `menu:start-game` → gameRunner spawns sandbox → `GAME_INIT` sent
+7. User presses Launch → `menu:enter-lobby` → window navigates to board-shell/src/index.html
+8. Board shell shows lobby with QR code, player list, Start button
+9. User presses Start → `menu:start-game` → gameRunner spawns sandbox → `GAME_INIT` sent
+10. Game sandbox replies `GAME_READY` → HOST sends `GAME_STARTED` to board shell + all players
+11. Board shell mounts `board.html` iframe; player shells mount `player/hand.html` iframe
+12. Game over → board shell shows scores, Play Again / Quit options
 
 ### Message Flow
 
 All communication is routed through the HOST. No participant talks directly to another.
 
-- **PLAYER/BOARD ↔ HOST**: WebSocket (Socket.io) over local WiFi
+- **PLAYER phones ↔ HOST**: Socket.io WebSocket over local WiFi (player-shell uses `socket.io-client` via `/socket.io/socket.io.js`)
 - **HOST ↔ GAME sandbox**: Node.js Worker thread `postMessage`
-- **HOST ↔ Board BrowserWindow**: Electron IPC (via `host/src/preload.js` bridge)
-- **Shell ↔ iframe (board.html / hand.html)**: `window.postMessage` only — iframes are sandboxed
+- **HOST ↔ Board Shell (Electron renderer)**: Electron IPC via `host/src/preload.js` bridge (`board:message` push, `board:send` from shell)
+- **HOST ↔ Menu (Electron renderer)**: Electron IPC via same preload bridge (`menu:*` channels)
+- **Shell ↔ iframe (board.html / hand.html)**: `window.postMessage` only — iframes are sandboxed, `platform-sdk.js` provides `window.platform` API
 
 ### IPC Channels (main ↔ renderer)
 
@@ -86,9 +95,15 @@ All communication is routed through the HOST. No participant talks directly to a
 | `menu:start-game` | invoke | Spawn sandbox, send GAME_INIT |
 | `menu:stop-game` | invoke | Save state + stop sandbox |
 | `menu:exit` | send | Quit app |
+| `menu:get-server-info` | invoke | Returns current server info (for returning to menu) |
+| `menu:enter-lobby` | invoke | Navigate window to board shell lobby |
 | `menu:server-ready` | push | Port, join URL, QR code data URL |
 | `menu:players-update` | push | Live player connection list |
 | `menu:game-error` | push | Error message from sandbox |
+| `board:get-info` | invoke | Returns game name, players, QR code, join URL |
+| `board:back-to-menu` | invoke | Stop game, cleanup, navigate to menu |
+| `board:send` | send | Board shell → HOST (BOARD_READY, BOARD_ACTION) |
+| `board:message` | push | HOST → board shell (LOBBY_STATE, GAME_STARTED, UPDATE_BOARD, etc.) |
 
 ### Game Sandbox Security Model
 
@@ -172,9 +187,9 @@ If `persistState: true` in manifest, HOST auto-saves by sending `SAVE_STATE_REQU
 | Network Discovery | **Done** | `host/src/networkDiscovery.js` |
 | State Store | **Done** | `host/src/stateStore.js` |
 | Host Main (wired) | **Done** | `host/src/main.js` |
-| Board Shell | Not started | `board-shell/src/` |
-| Player Shell | Not started | `player-shell/src/` |
-| Platform SDK | Stub only | served by httpServer at `/platform-sdk.js` |
+| Board Shell | **Done** | `board-shell/src/index.html`, `shell.js`, `overlay.css` |
+| Player Shell | **Done** | `player-shell/src/index.html`, `shell.js`, `overlay.css` |
+| Platform SDK | **Done** | `player-shell/src/platform-sdk.js`, served at `/platform-sdk.js` |
 | Example Tic-Tac-Toe | Not started | `example-games/example-tictactoe/` |
 
 See `TODO.md` for the full checklist with suggested tests per phase.

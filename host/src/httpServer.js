@@ -53,18 +53,14 @@ function createHttpServer() {
   });
 
   // ── Platform SDK ─────────────────────────────────────────────────────────
-  // Served to game iframes. Phase 3 will create the actual file.
+  // Served to game iframes (board + player) so they can use window.platform
 
   const platformSdkPath = path.resolve(__dirname, '../../player-shell/src/platform-sdk.js');
 
   app.get('/platform-sdk.js', (_req, res) => {
     res.sendFile(platformSdkPath, (err) => {
       if (err) {
-        // Serve a minimal stub so game HTML doesn't 404 before Phase 3
-        res.type('application/javascript').send(
-          '// platform-sdk.js stub — full implementation in Phase 3\n' +
-          'window.platform = window.platform || {};\n'
-        );
+        res.status(404).send('// platform-sdk.js not found\n');
       }
     });
   });

@@ -266,6 +266,32 @@
       line-height: 1.5;
     }
 
+    /* ── Join Info ──────────────────────────────────────────────────── */
+
+    .join-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .join-qr {
+      width: 160px;
+      height: 160px;
+      border-radius: 8px;
+      background: var(--surface2);
+    }
+
+    .join-url {
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 600;
+      word-break: break-all;
+      text-align: center;
+      user-select: text;
+    }
+
     /* ── Action Buttons ──────────────────────────────────────────────── */
 
     .sidebar-actions {
@@ -443,10 +469,18 @@
 
   <!-- Sidebar -->
   <aside class="sidebar">
+    <div class="sidebar-section" id="join-info-section" style="display:none;">
+      <div class="panel-title">Join Game</div>
+      <div class="join-info">
+        <img id="join-qr" class="join-qr" src="" alt="Scan to join">
+        <div id="join-url" class="join-url"></div>
+      </div>
+    </div>
+
     <div class="sidebar-section">
       <div class="panel-title">Players Connected</div>
       <div id="players-list" class="players-list"></div>
-      <p id="no-players" class="no-players">No players connected yet.<br>Players join via their phone browser.</p>
+      <p id="no-players" class="no-players">No players connected yet.<br>Start the server to let players join.</p>
     </div>
 
     <div class="sidebar-actions">

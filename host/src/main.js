@@ -23,6 +23,9 @@ let serverPort = null;    // resolved port
 // Current loaded game
 let currentPack = null;   // { manifest, packDir, warnings }
 
+// Server info (set after server starts)
+let serverInfo = null;    // { port, joinUrl, qrDataUrl }
+
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
@@ -169,6 +172,13 @@ async function startServer() {
     pushPlayersUpdate(players);
   });
 
+  // Relay game messages to the board shell (Electron window) via IPC
+  socketServer.on('board-message', (msg) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('board:message', msg);
+    }
+  });
+
   // State persistence: listen for save-state events from the game
   stateStore = new StateStore();
   socketServer.on('save-state', (payload) => {
@@ -194,13 +204,16 @@ async function startServer() {
   const joinInfo = await networkDiscovery.generateJoinInfo(serverPort);
   console.log(`[HOST] Join URL: ${joinInfo.joinUrl}`);
 
+  // Store server info for board shell
+  serverInfo = {
+    port: serverPort,
+    joinUrl: joinInfo.joinUrl,
+    qrDataUrl: joinInfo.qrDataUrl,
+  };
+
   // Send server info to the menu renderer
   if (mainWindow) {
-    mainWindow.webContents.send('menu:server-ready', {
-      port: serverPort,
-      joinUrl: joinInfo.joinUrl,
-      qrDataUrl: joinInfo.qrDataUrl,
-    });
+    mainWindow.webContents.send('menu:server-ready', serverInfo);
   }
 }
 
@@ -258,9 +271,12 @@ async function startGame() {
 
   gameRunner.on('error', (err) => {
     console.error('[GAME] Error:', err.message);
-    // Notify board display
     if (mainWindow) {
       mainWindow.webContents.send('menu:game-error', { message: err.message });
+      mainWindow.webContents.send('board:message', {
+        type: 'ERROR',
+        payload: { message: err.message, fatal: true },
+      });
     }
   });
 
@@ -274,6 +290,16 @@ async function startGame() {
     console.log('[GAME] Game sandbox ready');
     // Notify existing lobby players that they are connected
     socketServer.notifyExistingPlayersConnected();
+
+    // Send GAME_STARTED to board shell with boardHtmlPath
+    const boardHtmlPath = `/game/${manifest.entry.board}`;
+    const playerHtmlPath = `/game/${manifest.entry.player}`;
+    if (mainWindow) {
+      mainWindow.webContents.send('board:message', {
+        type: 'GAME_STARTED',
+        payload: { boardHtmlPath, playerHtmlPath },
+      });
+    }
 
     // Restore state if applicable
     if (manifest.capabilities?.persistState) {
@@ -340,6 +366,10 @@ ipcMain.handle('menu:get-games', (_event, libraryPath) => {
   return scanLibrary(libraryPath);
 });
 
+ipcMain.handle('menu:get-server-info', () => {
+  return serverInfo;
+});
+
 ipcMain.handle('menu:browse-library', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -375,6 +405,78 @@ ipcMain.handle('menu:stop-game', () => {
 
 ipcMain.on('menu:exit', () => {
   app.quit();
+});
+
+// ─── Board Shell IPC ──────────────────────────────────────────────────────────
+
+ipcMain.handle('menu:enter-lobby', () => {
+  if (!mainWindow || !currentPack) return { ok: false };
+  mainWindow.loadFile(path.join(__dirname, '../../board-shell/src/index.html'));
+  return { ok: true };
+});
+
+ipcMain.handle('board:get-info', () => {
+  return {
+    name: currentPack?.manifest?.name || 'Game',
+    id: currentPack?.manifest?.id || '',
+    version: currentPack?.manifest?.version || '',
+    players: currentPack?.manifest?.players || {},
+    joinUrl: serverInfo?.joinUrl || '',
+    qrDataUrl: serverInfo?.qrDataUrl || '',
+    port: serverInfo?.port || 0,
+  };
+});
+
+ipcMain.handle('board:back-to-menu', () => {
+  if (!mainWindow) return { ok: false };
+  // Stop game if running
+  stopGame();
+  // Unmount pack assets and clear current pack
+  if (currentPack) {
+    httpCtx?.unmountPackAssets();
+    packLoader.cleanup(currentPack.packDir);
+    currentPack = null;
+  }
+  // Reset socket server to idle
+  socketServer?.endGame();
+  // Navigate back to menu
+  mainWindow.loadFile(path.join(__dirname, '../ui/menu.html'));
+  return { ok: true };
+});
+
+// Forward messages from board shell to host/game
+ipcMain.on('board:send', (_event, msg) => {
+  if (!msg || !msg.type) return;
+
+  if (msg.type === 'BOARD_READY') {
+    // Board iframe is loaded — send BOARD_INIT back to board shell
+    if (currentPack?.manifest && socketServer) {
+      const players = socketServer.getPlayersForGameInit();
+      if (mainWindow) {
+        mainWindow.webContents.send('board:message', {
+          type: 'BOARD_INIT',
+          payload: {
+            players,
+            settings: {},
+            gameName: currentPack.manifest.name,
+            locale: currentPack.manifest.locales?.default || 'en',
+          },
+        });
+      }
+      // Re-send last board state if available
+      if (socketServer.lastBoardState && mainWindow) {
+        mainWindow.webContents.send('board:message', socketServer.lastBoardState);
+      }
+    }
+    return;
+  }
+
+  if (msg.type === 'BOARD_ACTION') {
+    if (gameRunner?.isRunning) {
+      gameRunner.send({ ...msg, from: 'board' });
+    }
+    return;
+  }
 });
 
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
