@@ -24,6 +24,19 @@ function createHttpServer() {
     next();
   });
 
+  // ── Core locale files ─────────────────────────────────────────────────────
+  // Served at /locales/{lang}.json so player-shell (phones) can fetch them
+
+  const localesDir = path.resolve(__dirname, '../locales');
+  app.use('/locales', express.static(localesDir, { index: false }));
+
+  // ── Health check ──────────────────────────────────────────────────────────
+  // Phones can visit /health to confirm connectivity before scanning the QR
+
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok' });
+  });
+
   // ── Player Shell routes ──────────────────────────────────────────────────
 
   const playerShellDir = path.resolve(__dirname, '../../player-shell/src');

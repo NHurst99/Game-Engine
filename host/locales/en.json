@@ -1,0 +1,20 @@
+{
+  "error.pack_not_found": "Pack file does not exist: {path}",
+  "error.invalid_zip": "Pack is not a valid ZIP file: {error}",
+  "error.missing_manifest": "Pack is missing manifest.json at root",
+  "error.invalid_json": "manifest.json is not valid JSON: {error}",
+  "error.invalid_id": "Invalid or missing 'id': must match pattern ^[a-z0-9]+(\\.[a-z0-9]+)+$",
+  "error.missing_name": "Missing or empty 'name' in manifest",
+  "error.invalid_version": "Invalid or missing 'version': must be semver x.y.z",
+  "error.missing_players": "Missing 'players' object in manifest",
+  "error.players_min": "'players.min' must be a positive integer",
+  "error.players_max": "'players.max' must be an integer >= min",
+  "error.missing_entry": "Missing 'entry' object in manifest",
+  "error.missing_entry_point": "Missing required entry point: 'entry.{key}'",
+  "error.entry_file_missing": "Entry file not found in pack: entry.{key}",
+  "error.optional_entry_missing": "Optional entry file specified but missing: entry.{key}",
+  "error.platform_version": "Pack requires platform version {required}, but current platform is {current}",
+  "error.path_traversal": "Path traversal detected in pack: {entry}",
+  "error.symlink": "Symlink detected in pack: {entry}",
+  "error.zip_bomb": "Pack extraction would exceed size limit (possible ZIP bomb)"
+}

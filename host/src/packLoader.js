@@ -60,7 +60,40 @@ function load(filePath) {
   zip.extractAllTo(tmpDir, true);
   extractedDirs.push(tmpDir);
 
-  return { manifest, packDir: tmpDir, warnings };
+  // 8. Load pack locale files (optional — missing files are silently skipped)
+  const packLocales = loadPackLocales(manifest, tmpDir, warnings);
+
+  return { manifest, packDir: tmpDir, warnings, packLocales };
+}
+
+/**
+ * Read locale JSON files from an extracted pack directory.
+ * Looks for `locales/{lang}.json` for each language in manifest.locales.supported.
+ * If the `supported` array is absent, only 'en' is attempted.
+ *
+ * @param {object} manifest
+ * @param {string} packDir — absolute path to the extracted pack temp directory
+ * @param {string[]} warnings — mutable warnings array
+ * @returns {{ [lang: string]: object }} — loaded locale maps keyed by language tag
+ */
+function loadPackLocales(manifest, packDir, warnings) {
+  const supported = manifest.locales?.supported || ['en'];
+  const result = {};
+
+  for (const lang of supported) {
+    const localePath = path.join(packDir, 'locales', `${lang}.json`);
+    try {
+      const raw = fs.readFileSync(localePath, 'utf8');
+      result[lang] = JSON.parse(raw);
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        warnings.push(`Could not load locale "${lang}": ${err.message}`);
+      }
+      // ENOENT: locale file simply doesn't exist — silently skip
+    }
+  }
+
+  return result;
 }
 
 /**

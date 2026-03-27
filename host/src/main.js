@@ -24,7 +24,7 @@ let serverPort = null;    // resolved port
 let currentPack = null;   // { manifest, packDir, warnings }
 
 // Server info (set after server starts)
-let serverInfo = null;    // { port, joinUrl, qrDataUrl }
+let serverInfo = null;    // { port, joinUrl, qrDataUrl, allIPs }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
@@ -199,16 +199,41 @@ async function startServer() {
   });
   console.log(`[HOST] HTTP + WebSocket server listening on port ${serverPort}`);
 
+  // Windows Firewall — add inbound rule for the chosen port
+  const fwResult = await networkDiscovery.ensureFirewallRule(serverPort);
+  if (!fwResult.ok) {
+    console.warn('[HOST] Firewall rule not added — showing guidance dialog');
+    // Show dialog after window is ready (don't block server startup)
+    setImmediate(() => {
+      if (mainWindow) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'warning',
+          title: 'Allow Players to Connect',
+          message: `Windows Firewall may block phones from joining on port ${serverPort}.`,
+          detail:
+            'To fix: open Windows Defender Firewall → Advanced Settings → Inbound Rules → ' +
+            `New Rule → Port → TCP ${serverPort} → Allow the Connection.\n\n` +
+            'Or run this app as Administrator to set the rule automatically.',
+          buttons: ['OK'],
+        });
+      }
+    });
+  }
+
   // mDNS + QR
   networkDiscovery.advertise(serverPort);
   const joinInfo = await networkDiscovery.generateJoinInfo(serverPort);
   console.log(`[HOST] Join URL: ${joinInfo.joinUrl}`);
+  if (joinInfo.allIPs.length > 1) {
+    console.log(`[HOST] All LAN IPs: ${joinInfo.allIPs.map(i => `${i.address} (${i.iface})`).join(', ')}`);
+  }
 
-  // Store server info for board shell
+  // Store server info for board shell and menu
   serverInfo = {
     port: serverPort,
     joinUrl: joinInfo.joinUrl,
     qrDataUrl: joinInfo.qrDataUrl,
+    allIPs: joinInfo.allIPs,
   };
 
   // Send server info to the menu renderer
@@ -241,8 +266,8 @@ async function loadGamePack(filePath) {
   // Mount pack assets for player HTTP access
   httpCtx.mountPackAssets(result.packDir);
 
-  // Tell socket server about the new game
-  socketServer.loadGame(result.manifest);
+  // Tell socket server about the new game (pass locale data so it reaches players)
+  socketServer.loadGame(result.manifest, result.packLocales);
 
   console.log(`[HOST] Loaded pack: ${result.manifest.name} v${result.manifest.version}`);
 
@@ -325,6 +350,7 @@ async function startGame() {
       players,
       settings: {},
       locale: manifest.locales?.default || 'en',
+      packLocales: currentPack.packLocales || {},
       platformVersion: packLoader.PLATFORM_VERSION,
       packVersion: manifest.version,
     },
@@ -368,6 +394,18 @@ ipcMain.handle('menu:get-games', (_event, libraryPath) => {
 
 ipcMain.handle('menu:get-server-info', () => {
   return serverInfo;
+});
+
+ipcMain.handle('menu:get-network-info', () => {
+  if (!serverInfo) return null;
+  return {
+    primaryUrl: serverInfo.joinUrl,
+    port: serverInfo.port,
+    allUrls: (serverInfo.allIPs || []).map(({ iface, address }) => ({
+      iface,
+      url: `http://${address}:${serverInfo.port}`,
+    })),
+  };
 });
 
 ipcMain.handle('menu:browse-library', async () => {
@@ -460,6 +498,7 @@ ipcMain.on('board:send', (_event, msg) => {
             settings: {},
             gameName: currentPack.manifest.name,
             locale: currentPack.manifest.locales?.default || 'en',
+            packLocales: currentPack.packLocales || {},
           },
         });
       }

@@ -107,6 +107,38 @@ function onServerReady(info) {
   // Update no-players message
   document.getElementById('no-players').innerHTML =
     'No players connected yet.<br>Scan the QR code or visit the URL above.';
+
+  // Populate alternate IPs for the "Can't connect?" section
+  populateAlternateIPs(info);
+}
+
+async function populateAlternateIPs(primaryInfo) {
+  const netInfo = await platform.invoke('menu:get-network-info');
+  if (!netInfo || !netInfo.allUrls) return;
+
+  // Show only URLs that differ from the primary one
+  const alternates = netInfo.allUrls.filter(({ url }) => url !== primaryInfo.joinUrl);
+  const list = document.getElementById('cant-scan-list');
+  const details = document.getElementById('cant-scan-details');
+
+  if (alternates.length === 0) {
+    details.style.display = 'none';
+    return;
+  }
+
+  list.innerHTML = alternates.map(({ iface, url }) => `
+    <div class="cant-scan-row">
+      <a href="${escapeHtml(url)}" target="_blank">${escapeHtml(url)}</a>
+      <span class="cant-scan-iface">(${escapeHtml(iface)})</span>
+    </div>
+  `).join('');
+
+  // Also add /health hint
+  list.innerHTML += `
+    <div class="cant-scan-row" style="margin-top:6px;font-size:11px;color:var(--muted)">
+      Test connectivity: open <strong>/health</strong> on any URL above
+    </div>
+  `;
 }
 
 // ─── Players Panel ────────────────────────────────────────────────────────────

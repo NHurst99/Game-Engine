@@ -23,6 +23,7 @@ class SocketServer extends EventEmitter {
     // Game state
     this.gameRunner = null;     // set by host when game starts
     this.manifest = null;       // set when pack is loaded
+    this.packLocales = null;    // { en: {...}, es: {...} } — from pack's locales/ files
     this.gamePhase = 'idle';    // 'idle' | 'lobby' | 'in_progress'
     this.playerCounter = 0;
     this.lastBoardState = null; // cache for board reconnection
@@ -46,9 +47,12 @@ class SocketServer extends EventEmitter {
 
   /**
    * Prepare for a new game session. Call after pack is loaded.
+   * @param {object} manifest
+   * @param {object} [packLocales] — locale maps from the pack, e.g. { en: {...}, es: {...} }
    */
-  loadGame(manifest) {
+  loadGame(manifest, packLocales) {
     this.manifest = manifest;
+    this.packLocales = packLocales || null;
     this.gamePhase = 'lobby';
     this.players.clear();
     this.playerCounter = 0;
@@ -232,6 +236,7 @@ class SocketServer extends EventEmitter {
         gameId: this.manifest?.id || '',
         playerCount: this.players.size,
         locale: this.manifest?.locales?.default || 'en',
+        packLocales: this.packLocales || {},
         playerHtmlPath,
         status: 'lobby',
       },
@@ -282,6 +287,7 @@ class SocketServer extends EventEmitter {
           gameId: this.manifest?.id || '',
           playerCount: this.players.size,
           locale: this.manifest?.locales?.default || 'en',
+          packLocales: this.packLocales || {},
           playerHtmlPath: rejoinPlayerHtmlPath,
           status: 'lobby',
         },
@@ -298,6 +304,7 @@ class SocketServer extends EventEmitter {
           gameId: this.manifest?.id || '',
           playerCount: this.players.size,
           locale: this.manifest?.locales?.default || 'en',
+          packLocales: this.packLocales || {},
           playerHtmlPath: rejoinPlayerHtmlPath,
           status: 'in_progress',
         },

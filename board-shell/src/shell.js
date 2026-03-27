@@ -5,6 +5,7 @@
 
 let gameInfo = null;    // { name, id, version, players, joinUrl, qrDataUrl, port }
 let playerMap = {};     // playerId → { name, connected }
+let packLocales = {};   // { en: {...}, es: {...} } — from BOARD_INIT
 
 // ─── Screen Management ───────────────────────────────────────────────────────
 
@@ -55,6 +56,11 @@ function handlePlatformMessage(msg) {
       break;
     case 'UPDATE_BOARD':
     case 'BOARD_INIT':
+      if (msg.type === 'BOARD_INIT' && msg.payload?.packLocales) {
+        packLocales = msg.payload.packLocales;
+      }
+      forwardToFrame(msg);
+      break;
     case 'PLAYER_CONNECTED':
     case 'PLAYER_DISCONNECTED':
     case 'PLAY_AUDIO':

@@ -292,6 +292,47 @@
       user-select: text;
     }
 
+    .cant-scan {
+      width: 100%;
+    }
+
+    .cant-scan summary {
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+      list-style: none;
+      outline: none;
+    }
+
+    .cant-scan summary::-webkit-details-marker { display: none; }
+
+    .cant-scan summary:hover { color: var(--text); }
+
+    .cant-scan-list {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .cant-scan-row {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      user-select: text;
+    }
+
+    .cant-scan-row a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .cant-scan-iface {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
     /* ── Action Buttons ──────────────────────────────────────────────── */
 
     .sidebar-actions {
@@ -474,6 +515,10 @@
       <div class="join-info">
         <img id="join-qr" class="join-qr" src="" alt="Scan to join">
         <div id="join-url" class="join-url"></div>
+        <details class="cant-scan" id="cant-scan-details">
+          <summary>Can't connect?</summary>
+          <div class="cant-scan-list" id="cant-scan-list"></div>
+        </details>
       </div>
     </div>
 

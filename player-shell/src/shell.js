@@ -11,6 +11,7 @@ var state = {
   gameName: null,
   gameId: null,
   locale: 'en',
+  packLocales: {},
   socket: null,
   reconnectAttempts: 0,
   maxReconnectAttempts: 10,
@@ -123,6 +124,7 @@ function onPlayerJoin(payload) {
   state.gameName = payload.gameName;
   state.gameId = payload.gameId;
   state.locale = payload.locale || 'en';
+  state.packLocales = payload.packLocales || {};
   state.playerHtmlPath = payload.playerHtmlPath || null;
 
   savePlayerId(payload.playerId, payload.playerName);
@@ -207,6 +209,7 @@ function mountPlayerFrame() {
         gameName: state.gameName,
         gameId: state.gameId,
         locale: state.locale,
+        packLocales: state.packLocales,
       }
     }, '*');
   };

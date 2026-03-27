@@ -6,12 +6,82 @@
  *   - once(type, handler) — subscribe once
  *   - off(type, handler)  — unsubscribe
  *   - sendAction(action, data) — send a player action to the game server
- *   - playerId, playerName, playerIndex, gameName, locale
+ *   - sendBoardAction(action, data) — send a board action (board iframes only)
+ *   - ready() — signal that the frame is ready
+ *   - whenReady() — Promise that resolves with PLATFORM_INIT payload
+ *   - t(key, vars) — translate a string key
+ *   - setLanguage(lang) — change the active language
+ *   - playerId, playerName, playerIndex, gameName, gameId, locale
  *
  * Communication: postMessage with parent shell (board-shell or player-shell).
  */
 (function() {
   'use strict';
+
+  // ── String resolution ──────────────────────────────────────────────────────
+  // Self-contained; mirrors the logic in host/src/stringManager.js.
+  // Key format: "namespace:dot.key"  (namespace defaults to the pack id, or "core")
+
+  var _currentLang = 'en';
+  var _defaultLang = 'en';
+  var _coreLocales = {};  // { en: { 'error.foo': 'Foo' } }
+  var _packLocales = {};  // { packId: { en: {...} } }
+  var _gameId = null;     // set from PLATFORM_INIT so bare keys default to the pack
+
+  function _strResolve(obj, key) {
+    if (!obj || obj[key] === undefined) return null;
+    return String(obj[key]);
+  }
+
+  function _t(key, vars) {
+    var ns = _gameId || 'core';
+    var dotKey = key;
+    var colon = key.indexOf(':');
+    if (colon !== -1) {
+      ns = key.slice(0, colon);
+      dotKey = key.slice(colon + 1);
+    }
+
+    var str = null;
+    if (ns === 'core') {
+      str = _strResolve(_coreLocales[_currentLang], dotKey);
+      if (str === null) str = _strResolve(_coreLocales[_defaultLang], dotKey);
+    } else {
+      var pack = _packLocales[ns] || {};
+      str = _strResolve(pack[_currentLang], dotKey);
+      if (str === null) str = _strResolve(pack[_defaultLang], dotKey);
+      if (str === null) str = _strResolve(_coreLocales[_currentLang], dotKey);
+      if (str === null) str = _strResolve(_coreLocales[_defaultLang], dotKey);
+    }
+
+    if (str === null) return key;
+
+    if (vars) {
+      str = str.replace(/\{(\w+)\}/g, function(match, k) {
+        return vars[k] !== undefined ? String(vars[k]) : match;
+      });
+    }
+    return str;
+  }
+
+  function _registerPackLocales(packId, locales) {
+    if (!packId || !locales) return;
+    _packLocales[packId] = locales;
+  }
+
+  // Fetch and register core locale JSON from the platform server
+  function _loadCoreLocales(lang) {
+    fetch('/locales/' + lang + '.json')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (data) {
+          _coreLocales[lang] = data;
+        }
+      })
+      .catch(function() { /* non-fatal — fallback to key-as-string */ });
+  }
+
+  // ── Event listeners ────────────────────────────────────────────────────────
 
   var listeners = {};
   var initPayload = null;
@@ -91,6 +161,31 @@
       return new Promise(function(resolve) {
         initResolve = resolve;
       });
+    },
+
+    /**
+     * Translate a key, with optional variable interpolation.
+     *
+     * Keys without a namespace prefix default to the current pack's id.
+     * Fallback chain: pack[currentLang] → pack[defaultLang] → core[currentLang] → core[defaultLang] → key
+     *
+     * @param {string} key — "namespace:dot.key" or "dot.key"
+     * @param {Object} [vars] — interpolation variables, e.g. { name: 'Alice' }
+     * @returns {string}
+     */
+    t: function(key, vars) {
+      return _t(key, vars);
+    },
+
+    /**
+     * Change the active language. Strings will resolve against this language first.
+     * @param {string} lang — BCP 47-ish tag, e.g. 'en', 'es'
+     */
+    setLanguage: function(lang) {
+      if (!lang) return;
+      _currentLang = lang;
+      platform.locale = lang;
+      _loadCoreLocales(lang);
     }
   };
 
@@ -99,7 +194,7 @@
     var msg = event.data;
     if (!msg || !msg.type) return;
 
-    // Handle PLATFORM_INIT — set identity fields
+    // Handle PLATFORM_INIT — player iframes: set identity + register locale data
     if (msg.type === 'PLATFORM_INIT') {
       var p = msg.payload || {};
       platform.playerId = p.playerId || null;
@@ -108,10 +203,40 @@
       platform.gameName = p.gameName || null;
       platform.gameId = p.gameId || null;
       platform.locale = p.locale || 'en';
+
+      // Set language and load core locale strings
+      _currentLang = platform.locale;
+      _defaultLang = 'en';
+      _gameId = p.gameId || null;
+      _loadCoreLocales(_currentLang);
+      if (_currentLang !== _defaultLang) _loadCoreLocales(_defaultLang);
+
+      // Register pack locale data delivered via this payload
+      if (p.gameId && p.packLocales && typeof p.packLocales === 'object') {
+        _registerPackLocales(p.gameId, p.packLocales);
+      }
+
       initPayload = p;
       if (initResolve) {
         initResolve(p);
         initResolve = null;
+      }
+    }
+
+    // Handle BOARD_INIT — board iframes: extract locale + pack data.
+    // (Board iframes receive BOARD_INIT instead of PLATFORM_INIT.)
+    if (msg.type === 'BOARD_INIT') {
+      var b = msg.payload || {};
+      var boardLocale = b.locale || 'en';
+      _currentLang = boardLocale;
+      _defaultLang = 'en';
+      platform.locale = boardLocale;
+      _loadCoreLocales(boardLocale);
+      if (boardLocale !== 'en') _loadCoreLocales('en');
+      // Register pack locale data if provided alongside BOARD_INIT
+      if (b.gameId && b.packLocales && typeof b.packLocales === 'object') {
+        _gameId = b.gameId;
+        _registerPackLocales(b.gameId, b.packLocales);
       }
     }
 
