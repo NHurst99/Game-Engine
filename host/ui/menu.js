@@ -165,7 +165,8 @@ function renderPlayers(players) {
 // ─── Settings Overlay ─────────────────────────────────────────────────────────
 
 function openSettings() {
-  const paths = Array.isArray(settings.libraryPath) ? settings.libraryPath : (settings.libraryPath ? [settings.libraryPath] : []);
+  const raw = settings.libraryPaths ?? settings.libraryPath;
+  const paths = Array.isArray(raw) ? raw : (raw ? [raw] : []);
   renderLibraryPaths(paths.length ? paths : ['']);
   document.getElementById('setting-fullscreen').checked = !!settings.fullscreen;
   document.getElementById('setting-audio').checked = settings.audioEnabled !== false;
@@ -214,7 +215,7 @@ function getLibraryPaths(includeEmpty = false) {
 async function saveSettings() {
   const newSettings = {
     ...settings,
-    libraryPath: getLibraryPaths(),
+    libraryPaths: getLibraryPaths(),
     fullscreen: document.getElementById('setting-fullscreen').checked,
     audioEnabled: document.getElementById('setting-audio').checked,
   };

@@ -290,7 +290,15 @@ ipcMain.handle('menu:settings-get', () => {
 ipcMain.handle('menu:settings-save', (_event, newSettings) => {
   settingsManager.saveSettings(newSettings);
   if (mainWindow) {
-    mainWindow.setFullScreen(!!newSettings.fullscreen);eeeeeeeeeeeee
+    mainWindow.setFullScreen(!!newSettings.fullscreen);
+  }
+  return { ok: true };
+});
+
+ipcMain.handle('menu:get-games', () => {
+  return libraryManager.scanLibrary();
+});
+
 ipcMain.handle('menu:get-server-info', () => {
   return serverInfo;
 });

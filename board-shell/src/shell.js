@@ -138,7 +138,7 @@ function onGameStarted(payload) {
   // Mount board iframe
   const frame = document.getElementById('board-frame');
   const boardPath = payload?.boardHtmlPath || '/game/board/board.html';
-  frame.src = boardPath;
+  frame.src = `http://localhost:${gameInfo.port}${boardPath}`;
 
   frame.onload = () => {
     // Notify host that the board frame is ready

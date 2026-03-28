@@ -12,19 +12,26 @@ function scanLibrary() {
 
   let entries = [];
   try {
-    for (const p of settingsManager.getSetting('libraryPaths')) {
-        if (!fs.existsSync(p)) {
-            fs.mkdirSync(p, { recursive: true });
+    for (const libraryPath of settingsManager.getSetting('libraryPaths')) {
+        if (!fs.existsSync(libraryPath)) {
+            fs.mkdirSync(libraryPath, { recursive: true });
         }
-        entries = entries.concat(fs.readdirSync(p).map(f => path.join(p, f)));
+        fs.readdirSync(libraryPath).forEach(f => {
+            const fullPath = path.join(libraryPath, f);
+            if (fs.statSync(fullPath).isFile() && f.endsWith('.boardgame')) {
+                entries.push(fullPath);
+            } 
+        //entries = entries.concat(fs.readdirSync(libraryPath).map(f => path.join(libraryPath, f)));
+       // if 
+        });
     }
   } catch {
     return games;
   }
 
-  for (const file of entries) {
-    if (!file.endsWith('.boardgame')) continue;
-    const filePath = path.join(libraryPath, file);
+  for (const filePath of entries) {
+    // if (!file.endsWith('.boardgame')) continue;
+    // const filePath = path.join(libraryPath, file);
 
     try {
       const zip = new AdmZip(filePath);
