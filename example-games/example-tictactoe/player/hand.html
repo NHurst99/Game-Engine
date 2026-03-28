@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Tic-Tac-Toe</title>
+  <script src="/platform-sdk.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f172a;
+      color: #f1f5f9;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      gap: 20px;
+    }
+
+    /* ── Symbol badge ── */
+
+    #symbol-badge {
+      font-size: 72px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    #symbol-badge.X { color: #3b82f6; }
+    #symbol-badge.O { color: #f97316; }
+
+    /* ── Status ── */
+
+    #turn-status {
+      font-size: 18px;
+      text-align: center;
+      color: #64748b;
+      min-height: 26px;
+    }
+    #turn-status.my-turn { color: #22c55e; font-weight: 700; }
+    #turn-status.thinking { color: #64748b; font-style: italic; }
+
+    /* ── Grid ── */
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(3, 92px);
+      grid-template-rows: repeat(3, 92px);
+      gap: 8px;
+    }
+
+    .cell {
+      background: #1e293b;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 44px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      border: 2px solid transparent;
+    }
+
+    .cell:active { transform: scale(0.92); }
+    .cell.empty.tappable { background: #1e293b; border-color: #334155; }
+    .cell.empty.tappable:active { background: #334155; }
+    .cell.X { color: #3b82f6; cursor: default; }
+    .cell.O { color: #f97316; cursor: default; }
+    .cell.win { background: #1e3a5f; }
+    .cell.X.win { color: #60a5fa; }
+    .cell.O.win { color: #fb923c; }
+
+    /* ── Result ── */
+
+    #result {
+      font-size: 24px;
+      font-weight: 700;
+      text-align: center;
+      min-height: 32px;
+    }
+
+    #hint {
+      font-size: 13px;
+      color: #334155;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="symbol-badge">?</div>
+  <div id="turn-status">Waiting...</div>
+  <div id="grid"></div>
+  <div id="result"></div>
+  <div id="hint">Tap a cell to place your mark</div>
+
+  <script>
+    var mySymbol = null;
+    var isMyTurn = false;
+    var currentBoard = Array(9).fill(null);
+    var gamePhase = 'waiting';
+
+    // Build grid
+    var grid = document.getElementById('grid');
+    for (var i = 0; i < 9; i++) {
+      (function(idx) {
+        var cell = document.createElement('div');
+        cell.className = 'cell empty';
+        cell.id = 'c' + idx;
+        cell.addEventListener('click', function() { handleTap(idx); });
+        grid.appendChild(cell);
+      })(i);
+    }
+
+    function handleTap(index) {
+      if (!isMyTurn || gamePhase !== 'playing') return;
+      if (currentBoard[index] !== null) return;
+      window.platform.sendAction('PLACE_MARK', { cellIndex: index });
+    }
+
+    window.platform.on('UPDATE_PLAYER', function(payload) {
+      mySymbol    = payload.mySymbol;
+      isMyTurn    = payload.isMyTurn;
+      currentBoard = payload.board;
+      gamePhase   = payload.phase;
+
+      var winLine = payload.winLine || null;
+
+      // Symbol badge
+      var badge = document.getElementById('symbol-badge');
+      badge.textContent = mySymbol || '?';
+      badge.className = mySymbol || '';
+
+      // Turn status
+      var turnEl = document.getElementById('turn-status');
+      if (gamePhase === 'playing') {
+        if (payload.isAiTurn) {
+          turnEl.textContent = (payload.aiName || 'CPU') + ' is thinking…';
+          turnEl.className = 'thinking';
+        } else if (isMyTurn) {
+          turnEl.textContent = 'Your turn!';
+          turnEl.className = 'my-turn';
+        } else {
+          turnEl.textContent = "Opponent's turn";
+          turnEl.className = '';
+        }
+      } else if (gamePhase === 'over') {
+        turnEl.textContent = '';
+        turnEl.className = '';
+      } else {
+        turnEl.textContent = 'Waiting…';
+        turnEl.className = '';
+      }
+
+      // Render board cells
+      currentBoard.forEach(function(mark, i) {
+        var cell = document.getElementById('c' + i);
+        var isWin = winLine && winLine.indexOf(i) !== -1;
+        if (mark) {
+          cell.textContent = mark;
+          cell.className = 'cell ' + mark + (isWin ? ' win' : '');
+        } else {
+          cell.textContent = '';
+          cell.className = 'cell empty' + (isMyTurn && gamePhase === 'playing' ? ' tappable' : '');
+        }
+      });
+
+      // Result + hint
+      var resultEl = document.getElementById('result');
+      var hintEl   = document.getElementById('hint');
+      if (gamePhase === 'over') {
+        if (payload.winner === 'draw') {
+          resultEl.textContent = "It's a draw!";
+        } else if (payload.winner === window.platform.playerId) {
+          resultEl.textContent = '🎉 You win!';
+        } else if (payload.winner === 'ai') {
+          resultEl.textContent = (payload.aiName || 'CPU') + ' wins.';
+        } else {
+          resultEl.textContent = 'You lose.';
+        }
+        hintEl.style.display = 'none';
+      } else {
+        resultEl.textContent = '';
+        hintEl.style.display = (isMyTurn && gamePhase === 'playing') ? 'block' : 'none';
+      }
+    });
+  </script>
+</body>
+</html>

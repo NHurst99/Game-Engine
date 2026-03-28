@@ -1,0 +1,28 @@
+{
+  "id": "com.example.tictactoe",
+  "name": "Tic-Tac-Toe",
+  "version": "1.0.0",
+  "description": "Classic 3×3 grid game. Play 1-vs-AI or 2-player.",
+  "author": "Platform Example",
+  "tags": ["classic", "2-player", "quick"],
+
+  "players": {
+    "min": 1,
+    "max": 2
+  },
+
+  "entry": {
+    "server": "server/game.js",
+    "board": "board/board.html",
+    "player": "player/hand.html"
+  },
+
+  "locales": {
+    "default": "en",
+    "supported": ["en"]
+  },
+
+  "capabilities": {
+    "persistState": false
+  }
+}

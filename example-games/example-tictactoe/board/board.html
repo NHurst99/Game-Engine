@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tic-Tac-Toe</title>
+  <script src="/platform-sdk.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f172a;
+      color: #f1f5f9;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3vh;
+      user-select: none;
+    }
+
+    h1 {
+      font-size: 2.4vw;
+      letter-spacing: 0.3em;
+      color: #64748b;
+      font-weight: 700;
+    }
+
+    /* ── Players ── */
+
+    #players {
+      display: flex;
+      gap: 4vw;
+      align-items: center;
+    }
+
+    .player-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.8vw;
+      padding: 0.8vw 2vw;
+      border-radius: 100vw;
+      background: #1e293b;
+      border: 2px solid transparent;
+      transition: border-color 0.3s, background 0.3s;
+      font-size: 1.6vw;
+    }
+
+    .player-badge.active {
+      border-color: #3b82f6;
+      background: #1e3a5f;
+    }
+
+    .player-badge .sym {
+      font-size: 2vw;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .player-badge.X .sym { color: #3b82f6; }
+    .player-badge.O .sym { color: #f97316; }
+
+    .ai-tag {
+      font-size: 0.85vw;
+      background: #334155;
+      color: #94a3b8;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 4px;
+    }
+
+    /* ── Status ── */
+
+    #status {
+      font-size: 2.2vw;
+      font-weight: 600;
+      color: #e2e8f0;
+      min-height: 2.6vw;
+      text-align: center;
+      transition: color 0.3s;
+    }
+
+    #status.thinking { color: #94a3b8; font-style: italic; }
+
+    /* ── Grid ── */
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(3, 16vw);
+      grid-template-rows: repeat(3, 16vw);
+      gap: 0.8vw;
+    }
+
+    .cell {
+      background: #1e293b;
+      border-radius: 1.2vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9vw;
+      font-weight: 800;
+      line-height: 1;
+      transition: background 0.2s;
+    }
+
+    .cell.X { color: #3b82f6; }
+    .cell.O { color: #f97316; }
+    .cell.win { background: #1e3a5f; }
+    .cell.X.win { color: #60a5fa; }
+    .cell.O.win { color: #fb923c; }
+  </style>
+</head>
+<body>
+  <h1>TIC-TAC-TOE</h1>
+  <div id="players"></div>
+  <div id="status">Waiting for players...</div>
+  <div id="grid"></div>
+
+  <script>
+    // Build grid cells
+    const grid = document.getElementById('grid');
+    for (let i = 0; i < 9; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.id = 'c' + i;
+      grid.appendChild(cell);
+    }
+
+    window.platform.on('UPDATE_BOARD', function(payload) {
+      const { board, currentTurn, currentTurnName, phase, winner, winLine, players, aiEnabled } = payload;
+
+      // Render cells
+      board.forEach(function(mark, i) {
+        const cell = document.getElementById('c' + i);
+        cell.textContent = mark || '';
+        const isWin = winLine && winLine.indexOf(i) !== -1;
+        cell.className = 'cell' + (mark ? ' ' + mark : '') + (isWin ? ' win' : '');
+      });
+
+      // Render player badges
+      document.getElementById('players').innerHTML = players.map(function(p) {
+        const isActive = currentTurn === p.id && phase === 'playing';
+        const aiTag = p.isAi ? '<span class="ai-tag">CPU</span>' : '';
+        return '<div class="player-badge ' + p.symbol + (isActive ? ' active' : '') + '">' +
+          '<span class="sym">' + p.symbol + '</span>' +
+          '<span>' + escapeHtml(p.name) + '</span>' +
+          aiTag +
+          '</div>';
+      }).join('');
+
+      // Status text
+      var statusEl = document.getElementById('status');
+      var text = '';
+      statusEl.className = '';
+
+      if (phase === 'waiting') {
+        text = aiEnabled ? 'Waiting for player to connect...' : 'Waiting for players to connect...';
+      } else if (phase === 'playing') {
+        var isAiTurn = aiEnabled && currentTurn === 'ai';
+        if (isAiTurn) {
+          text = AI_NAME + ' is thinking…';
+          statusEl.className = 'thinking';
+        } else {
+          text = currentTurnName + "'s turn";
+        }
+      } else if (phase === 'over') {
+        if (winner === 'draw') {
+          text = "It's a draw!";
+        } else if (winner === 'ai') {
+          text = AI_NAME + ' wins!';
+        } else {
+          var winnerPlayer = players.find(function(p) { return p.id === winner; });
+          text = (winnerPlayer ? escapeHtml(winnerPlayer.name) : 'Player') + ' wins! 🎉';
+        }
+      }
+      statusEl.textContent = text;
+    });
+
+    var AI_NAME = 'CPU';
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Signal to the board shell that we're ready
+    window.parent.postMessage({ type: 'BOARD_READY', payload: {} }, '*');
+  </script>
+</body>
+</html>

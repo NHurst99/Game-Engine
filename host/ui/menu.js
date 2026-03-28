@@ -165,7 +165,8 @@ function renderPlayers(players) {
 // ─── Settings Overlay ─────────────────────────────────────────────────────────
 
 function openSettings() {
-  document.getElementById('setting-library').value = settings.libraryPath || '';
+  const paths = Array.isArray(settings.libraryPath) ? settings.libraryPath : (settings.libraryPath ? [settings.libraryPath] : []);
+  renderLibraryPaths(paths.length ? paths : ['']);
   document.getElementById('setting-fullscreen').checked = !!settings.fullscreen;
   document.getElementById('setting-audio').checked = settings.audioEnabled !== false;
   document.getElementById('settings-overlay').classList.add('open');
@@ -175,10 +176,45 @@ function closeSettings() {
   document.getElementById('settings-overlay').classList.remove('open');
 }
 
+function renderLibraryPaths(paths) {
+  const list = document.getElementById('library-paths-list');
+  list.innerHTML = paths.map((p, i) => `
+    <div class="library-path-row" data-index="${i}">
+      <input type="text" class="setting-input" value="${escapeHtml(p)}" placeholder="/path/to/games">
+      <button class="btn btn-ghost" data-browse="${i}">Browse</button>
+      <button class="btn-icon" data-remove="${i}" title="Remove folder">×</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('[data-browse]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const chosen = await platform.invoke('menu:browse-library');
+      if (chosen) {
+        const row = list.querySelector(`[data-index="${btn.dataset.browse}"]`);
+        row.querySelector('input').value = chosen;
+      }
+    });
+  });
+
+  list.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const current = getLibraryPaths(true);
+      current.splice(parseInt(btn.dataset.remove, 10), 1);
+      renderLibraryPaths(current.length ? current : ['']);
+    });
+  });
+}
+
+function getLibraryPaths(includeEmpty = false) {
+  return Array.from(document.querySelectorAll('#library-paths-list .library-path-row input'))
+    .map(input => input.value.trim())
+    .filter(p => includeEmpty || p.length > 0);
+}
+
 async function saveSettings() {
   const newSettings = {
     ...settings,
-    libraryPath: document.getElementById('setting-library').value.trim(),
+    libraryPath: getLibraryPaths(),
     fullscreen: document.getElementById('setting-fullscreen').checked,
     audioEnabled: document.getElementById('setting-audio').checked,
   };
@@ -197,9 +233,15 @@ function wireListeners() {
   document.getElementById('btn-settings-cancel').addEventListener('click', closeSettings);
   document.getElementById('btn-settings-save').addEventListener('click', saveSettings);
 
-  document.getElementById('btn-browse').addEventListener('click', async () => {
+  document.getElementById('btn-add-library').addEventListener('click', async () => {
     const chosen = await platform.invoke('menu:browse-library');
-    if (chosen) document.getElementById('setting-library').value = chosen;
+    if (chosen) {
+      const current = getLibraryPaths(true);
+      // Replace the single empty placeholder if that's all there is
+      if (current.length === 1 && current[0] === '') current[0] = chosen;
+      else current.push(chosen);
+      renderLibraryPaths(current);
+    }
   });
 
   // Close overlay on backdrop click
